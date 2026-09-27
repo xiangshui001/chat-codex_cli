@@ -1,0 +1,18 @@
+{
+  "id": "DICT-001",
+  "title": "词汇查询条件解析示例",
+  "goal": "完成 src/query_parser.py 的 parse_query(text) 函数。返回 {\"filters\": {...}, \"semantic_query\": \"...\"}。支持双音节动词、双音节单义动词、三音节名词；演示只验证查询条件解析，不统计真实辞书。",
+  "inputs": ["PROJECT.md", "docs/data-schema.md"],
+  "allowed_paths": ["src/query_parser.py", "tests/", "docs/query-parser.md"],
+  "checks": ["query_contract"],
+  "acceptance": [
+    "双音节动词 -> filters={syllable_count:2,pos:verb}；semantic_query 为空字符串。",
+    "双音节单义动词 -> 增加 sense_count:1；三音节名词 -> syllable_count:3,pos:noun。",
+    "纯结构条件不再送入向量检索。未识别查询保留原文，filters 为空。",
+    "英文标签只是本演示的内部约定；不得据此改动真实项目的 schema。",
+    "函数不读取网络或真实数据，不将汉字数直接当作音节数。",
+    "空字符串得到空 filters 与空 semantic_query；非字符串输入抛 TypeError。"
+  ],
+  "depends_on": [],
+  "context": "这是协作流水线的独立练习任务。真实辞书统计还需要指定版本、词条去重单位、词性标签、义项口径和读音标准；本任务不替这些问题作决定。"
+}
