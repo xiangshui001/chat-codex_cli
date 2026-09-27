@@ -1,0 +1,14 @@
+{
+  "platform": "linux",
+  "python": "3.12.3",
+  "tests_discovered": 53,
+  "tests_executed": 53,
+  "skipped": 0,
+  "failures": 0,
+  "errors": 0,
+  "passed": true,
+  "elapsed_seconds": 44.866,
+  "real_models": false,
+  "real_github": false,
+  "posix_execution_covered": true
+}
