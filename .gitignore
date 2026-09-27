@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+auth.json
+credentials*
+runtime/
+*.log
+*.zip
+codex-github-local/validation/
+codex-github-local/profiles/local*.json
