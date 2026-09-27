@@ -1,0 +1,10 @@
+{
+  "bash_examples_syntax_checked": 43,
+  "python_syntax_checked": true,
+  "json_checked": true,
+  "manual_links_checked": true,
+  "generic_profile_and_task_protocol_checked": true,
+  "personal_path_and_token_scan_passed": true,
+  "real_models": false,
+  "real_github": false
+}
