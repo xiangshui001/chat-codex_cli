@@ -1,0 +1,234 @@
+{
+  "publication_date": "2026-09-28",
+  "runtime_version": "0.1.0",
+  "core_runtime_unchanged": true,
+  "public_changes": [
+    "generic profile, installer default and fixture reference",
+    "portable manuals and redacted evidence",
+    "offline Linux CI"
+  ],
+  "excludes": [
+    "credentials",
+    "live runtime",
+    "raw model logs",
+    "private project snapshots",
+    "local installation configuration"
+  ],
+  "files": {
+    ".github/workflows/offline-tests.yml": {
+      "bytes": 964,
+      "sha256": "bc7a317049ccf9487a58a958451cec58ff3166674cc1e44944e38b074e11c8d4",
+      "git_blob_sha": "5a447d4d68ed848a057b285aa36b770a5050b364"
+    },
+    ".gitignore": {
+      "bytes": 157,
+      "sha256": "da3d61aa94aeb849330014471a5d62db8d050ed0f3bc84e9a4852096a5ea77d9",
+      "git_blob_sha": "ed8d9964cce652a9b6a0439507a2622d5f513f83"
+    },
+    "AGENTS.md": {
+      "bytes": 1019,
+      "sha256": "a829ec8098b89d11bce616f14cbdadc187fa63a45680930e579044f5ff849656",
+      "git_blob_sha": "d3a8d41d52b706a521ea345fe2b24aa68b2311d8"
+    },
+    "codex-github-local/bridge.py": {
+      "bytes": 28880,
+      "sha256": "a9993df7758d0a9af2a1cc928b497be5d762573e491c69625e311efa72bd7a68",
+      "git_blob_sha": "beb74f04741e743f30816f4d79b85a987ae56e9b"
+    },
+    "codex-github-local/engine/provenance.json": {
+      "bytes": 482,
+      "sha256": "db2cf12b1be096835a389f6fe589ad4f672dc73b9b9982baf5b8a755b6711a63",
+      "git_blob_sha": "24c0c51fead5c41290104dbf9b46a0ad24492251"
+    },
+    "codex-github-local/engine/runner.py": {
+      "bytes": 36899,
+      "sha256": "ace401244fc4b09c1440a97d1f5734b57dbac41a9de6b9a440ec4bdd7c6306ab",
+      "git_blob_sha": "252af430f5207b408332d2fb866fbb3597de8dde"
+    },
+    "codex-github-local/engine/schemas/reviewer.json": {
+      "bytes": 373,
+      "sha256": "f1da153db63abfa928874322bc4b6ebb2aa71f6aa9718e1d10ff126cafe75c07",
+      "git_blob_sha": "e8ba82b04be367616300ec02b4329108301015b9"
+    },
+    "codex-github-local/engine/schemas/worker.json": {
+      "bytes": 366,
+      "sha256": "55b003ba5cd8558964ddfbf26334e643cc591026e579e176a5294c79ad7c48c5",
+      "git_blob_sha": "b2b5ffd1171d3896aaf395be5edf6fe0d1a768b6"
+    },
+    "codex-github-local/handoff_check.py": {
+      "bytes": 1136,
+      "sha256": "f0a44bd25b42480ce7b3f914b2fa27b0a2b1db9a1d0ccbd434d8d33c096aea69",
+      "git_blob_sha": "025a08b3ecf32ed903ebca5579a48baf2a82d915"
+    },
+    "codex-github-local/profiles/example.json": {
+      "bytes": 1184,
+      "sha256": "fac54a81341484eb1ecce6bad89053c454660fec78da8e34b3f5d4dfd019f405",
+      "git_blob_sha": "e7bdfeee30155bcbb144c73c064e03d7a31d04a6"
+    },
+    "codex-github-local/README.md": {
+      "bytes": 1488,
+      "sha256": "0a9ef8c2313da1443f34c530a013b7c15a5befd3eb721ae3a4b7fa81141039d8",
+      "git_blob_sha": "a40cf799a8384594c15c179627578d522f39f79d"
+    },
+    "codex-github-local/setup.py": {
+      "bytes": 5572,
+      "sha256": "1f15e834fbbe036dad924123266296c0b6c407afbf3ddc02051da0d9d8e534a2",
+      "git_blob_sha": "3deb7fbb6b1c00fc1917b67085dd36275bd55295"
+    },
+    "codex-github-local/tests/test_bridge.py": {
+      "bytes": 16918,
+      "sha256": "d05ef2081a294e0009ad00a0f149df8bbf323a32a9b055c7af21a9bb7e68b395",
+      "git_blob_sha": "8a333f9df1260ce3b17c2ad25924406a482dbe42"
+    },
+    "codex-github-local/tests/test_upstream.py": {
+      "bytes": 935,
+      "sha256": "6d1d70a4293fe5af17373e4189711eeaf5a693af1676231f52e03f6aa9a41f47",
+      "git_blob_sha": "4b569bd4df7d32a87fdab3fcb5270f4e7da7eda7"
+    },
+    "codex-github-local/tests/upstream/.gitignore": {
+      "bytes": 61,
+      "sha256": "a1d7de1b04fb14861354118ded37f97d73ca50f69d1761726606feba09a9ea38",
+      "git_blob_sha": "07efea7e63570f13f3f98ad07a9926691187a87a"
+    },
+    "codex-github-local/tests/upstream/AGENTS.md": {
+      "bytes": 1276,
+      "sha256": "fbeb39231ff2a321628d3775a89188ea42f9bc6b5c6661c8372c619423d4ca48",
+      "git_blob_sha": "7a950a610feba7470b1f937060f0a9dbf6827788"
+    },
+    "codex-github-local/tests/upstream/automation/checks/query_contract.py": {
+      "bytes": 1169,
+      "sha256": "e8185ac9c85c495bba7d4a25b658fae49a62737494c8ca42980348a8d0ba55d1",
+      "git_blob_sha": "b2585a23fa55fa56f432fd7ed301eeaac28ce4d5"
+    },
+    "codex-github-local/tests/upstream/automation/config.json": {
+      "bytes": 623,
+      "sha256": "80790215e2871ef8e8be2dbae9556aaae8b24f1a264d6ccfd91cd9d7ad8e5e4d",
+      "git_blob_sha": "69c8cf09ae646e915d78ebd8956919ae9678515b"
+    },
+    "codex-github-local/tests/upstream/automation/examples/DICT-001.json": {
+      "bytes": 1313,
+      "sha256": "f42bbca9c89e2580a196b08677150e7ec7c492a17747afa96b38af8df7d3bde2",
+      "git_blob_sha": "7dbde920e1353065ec7a1e131bd94a306983cff4"
+    },
+    "codex-github-local/tests/upstream/automation/runner.py": {
+      "bytes": 36899,
+      "sha256": "ace401244fc4b09c1440a97d1f5734b57dbac41a9de6b9a440ec4bdd7c6306ab",
+      "git_blob_sha": "252af430f5207b408332d2fb866fbb3597de8dde"
+    },
+    "codex-github-local/tests/upstream/automation/schemas/reviewer.json": {
+      "bytes": 373,
+      "sha256": "f1da153db63abfa928874322bc4b6ebb2aa71f6aa9718e1d10ff126cafe75c07",
+      "git_blob_sha": "e8ba82b04be367616300ec02b4329108301015b9"
+    },
+    "codex-github-local/tests/upstream/automation/schemas/worker.json": {
+      "bytes": 366,
+      "sha256": "55b003ba5cd8558964ddfbf26334e643cc591026e579e176a5294c79ad7c48c5",
+      "git_blob_sha": "b2b5ffd1171d3896aaf395be5edf6fe0d1a768b6"
+    },
+    "codex-github-local/tests/upstream/automation/testing/fake_codex.py": {
+      "bytes": 2304,
+      "sha256": "a035e676af872aa5105635b6862c54ab11574cf195c5f6899dcc5c47b27a09b9",
+      "git_blob_sha": "67a30ba943c3af05e78f6ba37bc5533b6ca0e882"
+    },
+    "codex-github-local/tests/upstream/automation/testing/test_cli_exit_codes.py": {
+      "bytes": 5015,
+      "sha256": "b45b53571cb80c91156c34a7bcac97d6c2fe584f7a1aa9594e12a9f8e6ace67b",
+      "git_blob_sha": "ecd8ef12dd900a4bf9e9a8af020add0b86c67416"
+    },
+    "codex-github-local/tests/upstream/automation/testing/test_reliability.py": {
+      "bytes": 10221,
+      "sha256": "67cba4a5e32b52926095becaac095be61a6ad79fb3ff639d288a7d368309d5ff",
+      "git_blob_sha": "a18a8a212e3c7aa018fdc5ad87a69535296b676f"
+    },
+    "codex-github-local/tests/upstream/automation/testing/test_runner.py": {
+      "bytes": 6275,
+      "sha256": "81b602de1cc510f1522753bf6830357aaee8a073df4ae2767f713b3ecc5fd1e9",
+      "git_blob_sha": "b12bf43ddfafc6ff2d40f12477dae70ccb8fd0b0"
+    },
+    "codex-github-local/tests/upstream/docs/data-schema.md": {
+      "bytes": 867,
+      "sha256": "77d80db6e77511f4f23a15eed6802545599beca90265975712990835b2dc6a04",
+      "git_blob_sha": "a408e23687e76274c1dcc4e4ca594b25b18d3db2"
+    },
+    "codex-github-local/tests/upstream/docs/decisions/0001-local-queue.md": {
+      "bytes": 727,
+      "sha256": "f2004970f852650f123b878f6b2d48b6dc4116a58cc86ee7ee4309163aa257f1",
+      "git_blob_sha": "23f5c97f90d90f2fe0047f89858126d58e0c9e61"
+    },
+    "codex-github-local/tests/upstream/PROJECT.md": {
+      "bytes": 1276,
+      "sha256": "0b5ae12b02f6670312afc877f0339dadc952bfd8080043b5c9c22d48b1176b07",
+      "git_blob_sha": "201be36eee283c29030aaf13a33598b25f2f8d29"
+    },
+    "codex-github-local/tests/upstream/src/query_parser.py": {
+      "bytes": 248,
+      "sha256": "6f08830841710d7462831ac02341291573d34f99e5d05ff6677caa6a9f182cb9",
+      "git_blob_sha": "3d0ffd5673093acd71f7afb819f0fc9251443b21"
+    },
+    "codex-github-local/verify.py": {
+      "bytes": 1555,
+      "sha256": "2be95d334935c7be658fe38256c8488a5d48ea185099fd38d9b105b8ba26e694",
+      "git_blob_sha": "405891d8e42dd0fa3249092c415bbb761cb4665c"
+    },
+    "docs/Chat协作手册.md": {
+      "bytes": 13393,
+      "sha256": "82e1a5b5086fb17e9316386eab607832d70ed6f54a48edbcc11ddcbdab68ce29",
+      "git_blob_sha": "fbe74780cf7a76ac245c19fa7ddbc2c11bcf5836"
+    },
+    "docs/VALIDATION.md": {
+      "bytes": 1929,
+      "sha256": "75c383cfc9ac609747230a994427b06136883a7651363fd1cb6b851cef41b760",
+      "git_blob_sha": "b421753fd3b988ed1fd8e26034e8f4b2d5b2490d"
+    },
+    "docs/环境排查.md": {
+      "bytes": 1568,
+      "sha256": "cf87ae1a75ec7b112ee87b9f5a9983245b30b2398932c1f2a39b6331c5408a3b",
+      "git_blob_sha": "6014f8d48d62ea630148986bd4c0659eb0cdee31"
+    },
+    "docs/用户使用手册.md": {
+      "bytes": 24605,
+      "sha256": "cf7a1d0d65fca80d1f16860c6fd49e9ce519fd2f4993dff124594b7fd4f32cf2",
+      "git_blob_sha": "608004468e85703fe83fbb671372dca629837805"
+    },
+    "history/exit-code-fix.patch": {
+      "bytes": 6359,
+      "sha256": "b1d23aa9cc4b08300b0adb558bc365d6150780579fee27c40d5b0e867a9fcad7",
+      "git_blob_sha": "37df7827af4c60bd2bae86240535af80e54661df"
+    },
+    "history/README.md": {
+      "bytes": 1278,
+      "sha256": "aa4856ebf7de264bb2440b4f6f944f120a525fb2ed30abb7e4e883190974f2a8",
+      "git_blob_sha": "fc2a769c7e34387d1938fc38bf49539d23afea7b"
+    },
+    "README.md": {
+      "bytes": 2781,
+      "sha256": "7f130158d6146d024b894e2a2b1117b12c328d4f216ade012391321bdc63f41b",
+      "git_blob_sha": "64a15e41bd030f9942bac5f19b87356b0d430414"
+    },
+    "validation/historical/engine-delta.json": {
+      "bytes": 430,
+      "sha256": "97605fb5d92154897ad00cf251bf163c0e952ebcf8676d19a636b6f52c414e89",
+      "git_blob_sha": "f3187c2aad40df5c4db0f9502efb9e2cdf42b7be"
+    },
+    "validation/historical/posix-offline-summary.json": {
+      "bytes": 276,
+      "sha256": "69fdf5623eca6c59dd401a401d71789ae38054327c071e4a175001c5f30666a4",
+      "git_blob_sha": "e65ec37aa8a913a53bd1603c04d1b6ba1854150c"
+    },
+    "validation/historical/windows-offline-summary.json": {
+      "bytes": 292,
+      "sha256": "8c6c65b1335c19ef9a872539c34e378ff29eb754a412c2eaeec7d6064ef86a6d",
+      "git_blob_sha": "56c56ade9790bd89ddbe89750751a083b0e79a02"
+    },
+    "validation/public-static-summary.json": {
+      "bytes": 288,
+      "sha256": "2b4ba70f899c5c98c5f1b01559c7dc95b6a7f177486f2be53f247de4de4cbd4d",
+      "git_blob_sha": "4576eb78e8df1065ba06bee5e1d19ae7fddf1c6d"
+    },
+    "validation/public-windows-summary.json": {
+      "bytes": 292,
+      "sha256": "6864c8097994e30565f856f3125047453f23b1807030aabbb92c7393cb1bff30",
+      "git_blob_sha": "b977635706393c54cb3b453ddbe84823aa1a6ac4"
+    }
+  }
+}
