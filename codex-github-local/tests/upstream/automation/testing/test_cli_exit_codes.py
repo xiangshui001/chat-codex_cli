@@ -1,0 +1,124 @@
+"""CLI exit status coverage; integration cases require Linux/WSL/macOS.
+
+Dispatcher tests replace Runner only and do not validate POSIX execution,
+authentication, locking, process cleanup, or real model calls.
+"""
+import contextlib
+import io
+import os
+from pathlib import Path
+import subprocess
+import sys
+from types import SimpleNamespace
+import unittest
+from unittest.mock import Mock, patch
+
+import test_runner as fixtures
+
+module = fixtures.module
+
+
+class ExitCodeDispatchTests(unittest.TestCase):
+    def invoke(self, result, *args):
+        runner = Mock(spec=["run_once"])
+        runner.run_once.return_value = result
+        stdout = io.StringIO()
+        # Replace this module's os binding, not the global os.name used by
+        # pathlib. No POSIX operation is called by these dispatcher tests.
+        with patch.object(module, "os", SimpleNamespace(name="posix")), \
+             patch.object(module, "Runner", return_value=runner), \
+             patch.object(module.time, "sleep") as sleep, \
+             patch.object(sys, "argv", ["runner.py", *args]), \
+             contextlib.redirect_stdout(stdout):
+            code = module.main()
+        runner.run_once.assert_called_once_with()
+        return code, stdout.getvalue(), sleep
+
+    def test_run_once_blocked_returns_one(self):
+        code, stdout, sleep = self.invoke("blocked", "run-once")
+        self.assertEqual(code, 1)
+        self.assertEqual(stdout.strip(), "blocked")
+        sleep.assert_not_called()
+
+    def test_watch_blocked_returns_one_without_waiting(self):
+        code, stdout, sleep = self.invoke(
+            "blocked", "watch", "--max-jobs", "1", "--interval", "1")
+        self.assertEqual(code, 1)
+        self.assertIn("blocked", stdout)
+        sleep.assert_not_called()
+
+    def test_run_once_success_and_idle_return_zero(self):
+        for result in ("needs_review", None):
+            with self.subTest(result=result):
+                code, stdout, _ = self.invoke(result, "run-once")
+                self.assertEqual(code, 0)
+                self.assertIn(result or "暂无可执行任务", stdout)
+
+    def test_watch_success_returns_zero(self):
+        code, stdout, _ = self.invoke(
+            "needs_review", "watch", "--max-jobs", "1", "--interval", "1")
+        self.assertEqual(code, 0)
+        self.assertIn("needs_review", stdout)
+
+
+@unittest.skipUnless(os.name == "posix", "Real runner CLI requires Linux/WSL/macOS")
+class ExitCodeCLIIntegrationTests(unittest.TestCase):
+    setUp = fixtures.IntegrationTests.setUp
+    git = fixtures.IntegrationTests.git
+    submit = fixtures.IntegrationTests.submit
+
+    def cli(self, *args):
+        return subprocess.run(
+            [sys.executable, str(self.root / "automation/runner.py"),
+             "--root", str(self.root), *args],
+            cwd=self.root, capture_output=True, encoding="utf-8", timeout=60)
+
+    def assert_blocked(self, *args):
+        cfg = module.read_json(self.r.config_path)
+        cfg["codex_command"] = [str(Path(self.tmp.name) / "nonexistent_codex")]
+        module.write_json(self.r.config_path, cfg)
+        self.git("add", "automation/config.json")
+        self.git("commit", "-m", "fixture missing CLI")
+        self.submit()
+        result = self.cli(*args)
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("blocked", result.stdout)
+        state = self.r.state("DICT-001")
+        self.assertEqual(state["status"], "blocked")
+        self.assertEqual(state["attempt"], 0)
+        self.assertEqual(state["failure_stage"], "preflight")
+        out = self.r.runtime / "outbox/DICT-001"
+        self.assertEqual(module.read_json(out / "preflight.json")["error_type"],
+                         "FileNotFoundError")
+        self.assertTrue((out / "review.md").is_file())
+        self.assertFalse((self.r.runtime / "worktrees/DICT-001").exists())
+
+    def test_run_once_blocked_exits_one(self):
+        self.assert_blocked("run-once")
+
+    def test_watch_blocked_exits_one(self):
+        self.assert_blocked("watch", "--max-jobs", "1", "--interval", "1")
+
+    def assert_needs_review(self, *args):
+        self.submit()
+        result = self.cli(*args)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("needs_review", result.stdout)
+        self.assertEqual(self.r.state("DICT-001")["status"], "needs_review")
+        self.assertEqual(self.git("rev-parse", "HEAD"), self.base)
+
+    def test_run_once_needs_review_exits_zero(self):
+        self.assert_needs_review("run-once")
+
+    def test_watch_needs_review_exits_zero(self):
+        self.assert_needs_review("watch", "--max-jobs", "1", "--interval", "1")
+
+    def test_run_once_no_task_exits_zero(self):
+        result = self.cli("run-once")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("暂无可执行任务", result.stdout)
+        self.assertEqual(self.r.jobs(), [])
+
+
+if __name__ == "__main__":
+    unittest.main()
