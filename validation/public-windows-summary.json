@@ -1,0 +1,14 @@
+{
+  "platform": "win32",
+  "python": "3.14.7",
+  "tests_discovered": 53,
+  "tests_executed": 27,
+  "skipped": 26,
+  "failures": 0,
+  "errors": 0,
+  "passed": true,
+  "elapsed_seconds": 40.297,
+  "real_models": false,
+  "real_github": false,
+  "posix_execution_covered": false
+}
