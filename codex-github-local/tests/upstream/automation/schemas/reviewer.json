@@ -1,0 +1,11 @@
+{
+  "type": "object",
+  "properties": {
+    "verdict": {"type": "string", "enum": ["pass", "revise", "blocked"]},
+    "summary": {"type": "string"},
+    "issues": {"type": "array", "items": {"type": "string"}},
+    "evidence": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["verdict", "summary", "issues", "evidence"],
+  "additionalProperties": false
+}
