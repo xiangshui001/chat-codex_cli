@@ -1,0 +1,67 @@
+{
+  "repository": "OWNER/REPO",
+  "authorized_users": [
+    "YOUR_GITHUB_LOGIN"
+  ],
+  "base_branch": "main",
+  "allowed_roots": [
+    "docs/",
+    "tasks/"
+  ],
+  "codex_command": [
+    "codex"
+  ],
+  "max_attempts": 2,
+  "model_timeout_seconds": 1200,
+  "max_changed_files": 8,
+  "max_file_bytes": 131072,
+  "protected_paths": [
+    "AGENTS.md",
+    ".gitignore",
+    ".github/",
+    ".codex/",
+    "automation/",
+    "schemas/",
+    "data/",
+    "docs/START_HERE.md",
+    "docs/STATUS.md",
+    "docs/CONTROL_PLANE.md",
+    "docs/COLLABORATION.md",
+    "tasks/BOARD.md",
+    "tasks/_template/"
+  ],
+  "roles": {
+    "worker": {
+      "model": null,
+      "reasoning_effort": null
+    },
+    "reviewer": {
+      "model": null,
+      "reasoning_effort": null
+    }
+  },
+  "required_checks": [
+    "diff_whitespace",
+    "task_handoff"
+  ],
+  "checks": {
+    "diff_whitespace": {
+      "argv": [
+        "git",
+        "diff",
+        "--check",
+        "main",
+        "HEAD"
+      ],
+      "timeout_seconds": 60
+    },
+    "task_handoff": {
+      "argv": [
+        "{python}",
+        "{bundle}/handoff_check.py",
+        "{task_id}"
+      ],
+      "timeout_seconds": 30
+    }
+  }
+}
