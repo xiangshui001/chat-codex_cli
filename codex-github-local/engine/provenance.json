@@ -1,0 +1,10 @@
+{
+  "original_runner_sha256": "83014da225ec735a65f2d8792317f497d1631ab654049a092018d55961955b10",
+  "adapted_runner_sha256": "ace401244fc4b09c1440a97d1f5734b57dbac41a9de6b9a440ec4bdd7c6306ab",
+  "changes": [
+    "Optional external control/config/runtime paths; original defaults retained",
+    "Configurable branch prefix; original default retained",
+    "Fixed checks can substitute task ID without shell interpolation"
+  ],
+  "fixture_uses_exact_adapted_runner": true
+}
