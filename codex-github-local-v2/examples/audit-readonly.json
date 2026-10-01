@@ -1,0 +1,51 @@
+{
+  "version": 2,
+  "repository": "OWNER/REPO",
+  "base_sha": "0123456789abcdef0123456789abcdef01234567",
+  "task": {
+    "id": "GH-42",
+    "type": "audit-readonly",
+    "title": "Read-only repository security audit",
+    "goal": "Read the repository for a defensive audit. Do not modify product code; write only the report and handoff.",
+    "read_scope": ["**"],
+    "write_scope": [
+      "docs/SECURITY_REVIEW.md",
+      "tasks/GH-42/"
+    ],
+    "checks": [
+      "project_handoff",
+      "task_handoff"
+    ],
+    "acceptance": [
+      "Report confirmed findings separately from conditional risks and hardening suggestions",
+      "Every finding includes evidence, impact, confidence and remediation guidance",
+      "No product source, configuration, workflow, dependency or data file is modified"
+    ],
+    "model_policy": {
+      "executor": {
+        "primary": {"name": "auto", "effort": "medium"},
+        "fallbacks": [
+          {"name": "stable", "effort": "medium"}
+        ]
+      },
+      "reviewer": {
+        "primary": {"name": "auto", "effort": "high"},
+        "fallbacks": [
+          {"name": "stable", "effort": "high"}
+        ]
+      }
+    },
+    "budget": {
+      "max_rounds": 2,
+      "max_minutes": 45,
+      "review_rounds": 1
+    },
+    "network": "deny",
+    "production": "deny",
+    "publication": {
+      "mode": "pr",
+      "draft_on_incomplete_validation": true
+    },
+    "context": "Public example only. Real model IDs and host policy stay in local configuration."
+  }
+}
