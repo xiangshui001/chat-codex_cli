@@ -64,7 +64,6 @@ class Controller:
             record.transition(RunState.MODEL_UNAVAILABLE, str(exc))
             return record
 
-        manual_validation = False
         for attempt in range(1, task.budget.max_rounds + 1):
             record.transition(
                 RunState.EXECUTING,
@@ -79,11 +78,6 @@ class Controller:
             validation = self.backend.validate(task, attempt)
             if validation.status == "fail":
                 if attempt < task.budget.max_rounds:
-                    record.transition(RunState.EXECUTING, "validation failed; retry")
-                    # The loop will record the next concrete execution attempt.
-                    # Move back to validating-compatible state by continuing from EXECUTING.
-                    # We do not call execute twice here; normalize to a fresh attempt below.
-                    record.state = RunState.VALIDATING
                     continue
                 record.transition(RunState.VALIDATION_INCOMPLETE, validation.summary)
                 return record
@@ -91,15 +85,16 @@ class Controller:
             manual_validation = validation.status == "unavailable"
             if manual_validation:
                 record.transition(RunState.MANUAL_REVIEW_REQUIRED, validation.summary)
-                record.transition(RunState.REVIEWING, "independent review despite unavailable validation")
+                record.transition(
+                    RunState.REVIEWING,
+                    "independent review despite unavailable validation",
+                )
             else:
                 record.transition(RunState.REVIEWING)
 
             review = self.backend.review(task, reviewer.choice, attempt)
             if review.verdict == "reject":
                 if attempt < task.budget.max_rounds:
-                    record.transition(RunState.EXECUTING, "review rejected; retry")
-                    record.state = RunState.VALIDATING
                     continue
                 record.transition(RunState.REVIEW_REJECTED, review.summary)
                 return record
