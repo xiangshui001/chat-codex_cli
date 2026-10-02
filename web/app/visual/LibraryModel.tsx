@@ -4,7 +4,7 @@ import type { LibraryInstance } from '../public/tisu/astral-library/index';
 
 type LibraryModule = Pick<typeof import('../public/tisu/astral-library/index'), 'mountLibrary'>;
 
-/** The TISU scene stays outside workspace state and is only a decorative still view. */
+/** Visual-only TISU wrapper; it owns no task, control, client or model state. */
 export function LibraryModel() {
   const host = useRef<HTMLDivElement>(null);
   const [status, setStatus] = useState<'loading' | 'ready' | 'fallback'>('loading');

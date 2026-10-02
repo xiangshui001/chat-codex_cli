@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - prototype/orchestrator-v2
+      - integration/**
     paths:
       - 'codex-github-local-v2/**'
       - 'docs/V2架构草案.md'
@@ -31,3 +32,13 @@ jobs:
       - name: Validate public examples
         run: |
           PYTHONPATH=codex-github-local-v2/src python3 -m codex_github_local_v2.cli validate codex-github-local-v2/examples/audit-readonly.json
+      - name: Build and smoke-test installed entrypoints
+        run: |
+          python3 -m pip wheel --no-deps ./codex-github-local-v2 --wheel-dir "$RUNNER_TEMP/v2-wheels"
+          python3 -m venv "$RUNNER_TEMP/v2-install"
+          "$RUNNER_TEMP/v2-install/bin/python" -m pip install --no-index --find-links "$RUNNER_TEMP/v2-wheels" codex-github-local-v2
+          export V2_EXAMPLE="$GITHUB_WORKSPACE/codex-github-local-v2/examples/audit-readonly.json"
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2" --help
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2" validate "$V2_EXAMPLE"
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-control" --help

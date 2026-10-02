@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 import tempfile
 import time
-from typing import Any, Callable, Iterable, Literal, Protocol
+from typing import Any, Iterable, Literal, Protocol
 
 from .contract import ContractError, Effort, ModelChoice
 from .github_protocol import (
@@ -18,7 +18,7 @@ from .github_protocol import (
     IssueView,
     validate_issue,
 )
-from .routing import ProbeResult
+from .model_adapter import ModelAdapter, ProbeResult
 
 CONTROL_TITLE_PREFIX = "[codex-control] "
 CONTROL_MARKER = "/codex-local control"
@@ -317,9 +317,6 @@ def _settings_from_dict(data: Any) -> RuntimeSettings:
     )
 
 
-Probe = Callable[[Literal["executor", "reviewer"], ModelChoice], ProbeResult]
-
-
 @dataclass(frozen=True)
 class AppliedControl:
     result: ControlResult
@@ -327,7 +324,7 @@ class AppliedControl:
 
 
 class RuntimeControlService:
-    def __init__(self, store: RuntimeSettingsStore, probe: Probe):
+    def __init__(self, store: RuntimeSettingsStore, probe: ModelAdapter):
         self.store = store
         self.probe = probe
 
@@ -380,11 +377,40 @@ class ControlLedger:
 
     def _load(self) -> dict[str, Any]:
         if not self.path.exists():
-            return {"version": 1, "records": {}}
-        data = json.loads(self.path.read_text(encoding="utf-8"))
-        if not isinstance(data, dict) or data.get("version") != 1 or not isinstance(data.get("records"), dict):
-            raise LedgerError("invalid control ledger")
+            return {"version": 2, "records": {}}
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise LedgerError("control ledger is unreadable; preserve it before recovery") from exc
+        if not isinstance(data, dict) or data.get("version") != 2 or not isinstance(data.get("records"), dict):
+            raise LedgerError("control ledger requires schema 2; preserve existing state before migration")
+        for control_id, row in data["records"].items():
+            if not self._valid_row(control_id, row):
+                raise LedgerError(f"invalid control receipt for {control_id}")
         return data
+
+    @staticmethod
+    def _valid_row(control_id: str, row: Any) -> bool:
+        if not isinstance(row, dict):
+            return False
+        required = {"fingerprint", "outcome", "message", "revision", "recorded_at",
+                    "issue_number", "receipt", "delivered_at"}
+        return (
+            set(row) == required
+            and type(row["issue_number"]) is int and row["issue_number"] > 0
+            and control_id == f"GH-{row['issue_number']}"
+            and isinstance(row["fingerprint"], str) and len(row["fingerprint"]) == 64
+            and all(c in "0123456789abcdef" for c in row["fingerprint"])
+            and row["outcome"] in ("applied", "model_unavailable")
+            and isinstance(row["message"], str)
+            and type(row["revision"]) is int and row["revision"] >= 0
+            and type(row["recorded_at"]) in (int, float)
+            and (row["delivered_at"] is None or type(row["delivered_at"]) in (int, float))
+            and isinstance(row["receipt"], str)
+            and row["receipt"].startswith(
+                f"<!-- codex-local-control {control_id} {row['fingerprint']} -->\n"
+            )
+        )
 
     def get(self, control_id: str) -> dict[str, Any] | None:
         return self._load()["records"].get(control_id)
@@ -395,7 +421,7 @@ class ControlLedger:
         *,
         outcome: str,
         message: str,
-        revision: int,
+        settings: RuntimeSettings,
     ) -> dict[str, Any]:
         data = self._load()
         fingerprint = command_fingerprint(command)
@@ -408,12 +434,30 @@ class ControlLedger:
             "fingerprint": fingerprint,
             "outcome": outcome,
             "message": message,
-            "revision": revision,
+            "revision": settings.revision,
             "recorded_at": time.time(),
+            "issue_number": int(command.control_id[3:]),
+            "receipt": (
+                f"<!-- codex-local-control {command.control_id} {fingerprint} -->\n"
+                + status_receipt(settings, outcome=outcome, message=message)
+            ),
+            "delivered_at": None,
         }
         data["records"][command.control_id] = row
         _atomic_json(self.path, data)
         return row
+
+    def pending_receipts(self) -> list[tuple[str, dict[str, Any]]]:
+        return sorted(
+            ((key, row) for key, row in self._load()["records"].items()
+             if row["delivered_at"] is None),
+            key=lambda item: (item[1]["recorded_at"], item[0]),
+        )
+
+    def mark_delivered(self, control_id: str) -> None:
+        data = self._load()
+        data["records"][control_id]["delivered_at"] = time.time()
+        _atomic_json(self.path, data)
 
 
 class ControlSource(Protocol):
@@ -458,6 +502,11 @@ class ControlProcessor:
         self.ledger = ledger
 
     def tick(self) -> TickResult:
+        # Drain the durable outbox before accepting another command. Issue state
+        # and the current settings cannot invalidate an already applied result.
+        pending = self.ledger.pending_receipts()
+        if pending:
+            return self._deliver(*pending[0])
         rejection = None
         for issue in sorted(self.source.list_open_control_issues(), key=lambda x: x.number):
             if issue.author not in self.authorized_users:
@@ -480,10 +529,10 @@ class ControlProcessor:
                 if existing.get("fingerprint") != command_fingerprint(command):
                     return TickResult("rejected", issue.number, "control id reused with different content")
                 continue
-            return self._apply(issue.number, command)
+            return self._apply(command)
         return rejection or TickResult("pending")
 
-    def _apply(self, issue_number: int, command: ControlCommand) -> TickResult:
+    def _apply(self, command: ControlCommand) -> TickResult:
         try:
             applied = self.runtime.apply(command)
             settings = applied.result.settings
@@ -498,10 +547,21 @@ class ControlProcessor:
             command,
             outcome=outcome,
             message=message,
-            revision=settings.revision,
+            settings=settings,
         )
-        self.source.post_comment(
-            issue_number,
-            status_receipt(settings, outcome=outcome, message=row["message"]),
+        return self._deliver(command.control_id, row)
+
+    def _deliver(self, control_id: str, row: dict[str, Any]) -> TickResult:
+        issue_number = row["issue_number"]
+        # A successful POST can lose its response. Reconcile against the exact
+        # immutable receipt before retrying; untrusted copies cannot acknowledge it.
+        exists = any(
+            comment.author in self.authorized_users
+            and comment.created_at == comment.updated_at
+            and comment.body == row["receipt"]
+            for comment in self.source.list_comments(issue_number)
         )
-        return TickResult(outcome, issue_number, message)
+        if not exists:
+            self.source.post_comment(issue_number, row["receipt"])
+        self.ledger.mark_delivered(control_id)
+        return TickResult(row["outcome"], issue_number, row["message"])

@@ -39,6 +39,8 @@ python3 "$HOME/codex-tools/chat-codex_cli/codex-github-local/verify.py"
 
 ## 管理与证据
 
+- [integration 模块边界与吸收决策](docs/INTEGRATION.md)：0.1.0、v2、Harness 契约、React 和视觉组件的维护入口。
+- `codex-github-local-v2/` 是独立旁路原型；`web/app/` 是唯一活跃前端，当前使用 MockClient。二者都尚未替换现役 0.1.0。
 - [验证范围](docs/VALIDATION.md)：明确离线测试、真实演示、GitHub PR 和未验证步骤。
 - [环境排查](docs/环境排查.md)：WSL 代理、沙箱审批、PATH 与依赖。
 - [修复历史](history/README.md)：可靠性修复、退出码补丁、桥接和交互文档。

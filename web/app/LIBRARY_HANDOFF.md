@@ -1,5 +1,9 @@
 # 星穹图书馆入口交接
 
+本文记录 PR #7 的历史交付与验证。integration 中薄 wrapper 位于
+`visual/LibraryModel.tsx`；来源原件保持逐字节一致。2026-10-02 本机没有
+Node/npm，目录整理后的 build/unit/浏览器检查待 Node 环境验证。
+
 ## 基线和范围
 
 - 需求：[Issue #6](https://github.com/xiangshui001/chat-codex_cli/issues/6)。

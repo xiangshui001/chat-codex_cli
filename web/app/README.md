@@ -6,7 +6,12 @@ Codex Host 和登录尚未接入。
 
 ## 运行
 
-需要 Node.js 22.12+（本轮使用 24.19.0）和 npm。
+需要 Node.js >=22.12.0。历史 PR 验证使用 24.19.0；package-lock 为版本 3，使用
+支持该格式的 npm，仓库未单独锁定 npm 版本。优先对齐 Node 24 系列并记录其 npm。
+
+2026-10-02 integration 维护环境没有 Node/npm，本轮只做静态审查和目录整理。
+下文 build、11 项 unit、19 项 E2E 和 2 项 dev 检查均为原 PR 的历史证据；目录
+变更后的本机结果统一标记为 **待 Node 环境验证**。本轮没有安装或修改系统环境。
 
 ```bash
 cd web/app
@@ -68,7 +73,7 @@ npm run preview
 | ------------------------------------ | ------------------------------------------------------------ |
 | `client/main.tsx`                    | 唯一组合入口，创建 MockClient；切换入口演示页与 AppShell     |
 | `client/LoginPage.tsx` / `login.css` | 未登录演示入口和响应式布局                                   |
-| `features/LibraryModel.tsx`          | 装饰模型的懒加载、单帧绘制、降级和卸载清理                   |
+| `visual/LibraryModel.tsx`            | 独立装饰模型的懒加载、单帧绘制、降级和卸载清理               |
 | `client/AppShell.tsx`                | 导航、hash 路由、主题、capabilities 守卫；可选 Mock 演示面板 |
 | `client/useWorkspace.ts`             | 唯一应用数据/控制入口；加载、错误、过期响应保护和回执查询    |
 | `features/`                          | 页面展示、搜索/筛选和表单草稿，不导入 transport 或 fixture   |
@@ -105,7 +110,7 @@ npx playwright test --config playwright.dev.config.ts -g 'repeated page entry|le
 `UPDATE_LOGIN_SCREENSHOTS=1`。无 GPU 的验证机器可显式设置
 `PLAYWRIGHT_SWIFTSHADER=1`，仅让测试浏览器使用软件 WebGL。
 
-本轮实际验证：严格类型检查与 Vite build 通过；11 项 MockClient 测试与
+历史 PR #7 实际验证：严格类型检查与 Vite build 通过；11 项 MockClient 测试与
 19 项 Chromium 浏览器测试通过（原有 12 项 + 7 项入口/模型检查）。浏览器包括
 1440×1080 桌面、390×844 手机，
 并检查 320px 宽度无页面横向溢出；表格和 JSON 在各自容器滚动。无页面/console
@@ -115,7 +120,7 @@ npx playwright test --config playwright.dev.config.ts -g 'repeated page entry|le
 图书馆检查使用实际 Three.js 和 Chromium WebGL2，渲染后空闲 RAF 为零；重复进入、
 退出和桌面/手机切换后旧上下文丢失，ResizeObserver 被清理。另验证延迟导入后
 提前退出、WebGL 失败、运行中上下文丢失、键盘入口、reduced motion 与手机滚动。
-本机采用 SwiftShader 软件渲染，未验证用户台式机 GPU、真实手机性能或帧率。
+历史验证机器采用 SwiftShader 软件渲染，未验证用户台式机 GPU、真实手机性能或帧率。
 Vite 开发模式下另外跑过上述两项生命周期/延迟导入检查，React StrictMode 的
 额外 setup/cleanup 也通过；开发模式检查使用独立的 4174 端口。
 

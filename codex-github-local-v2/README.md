@@ -7,13 +7,25 @@
 - read_scope / write_scope 分离；
 - protected path 决策；
 - 明确状态机；
-- 模型 preflight + fallback；\n- GitHub Control Issue 协议：可远程切换默认模型/思考强度、pause/resume/status；
+- 模型 preflight + fallback；
+- GitHub Control Issue 协议：可远程切换默认模型/思考强度、pause/resume/status；
 - 任务预算；
 - “验证不可用 → Draft PR / 人工复核”而不是一律 blocked。
 
 ## 运行
 
 仅依赖 Python 3.11+ 标准库。
+
+integration 中的包版本为 **0.0.2**。运行时没有第三方 Python 依赖；构建需要
+setuptools。安装到独立虚拟环境，不覆盖 0.1.0 的 launcher/profile/runtime：
+
+```bash
+cd codex-github-local-v2
+python3 -m venv .venv
+.venv/bin/python -m pip install .
+.venv/bin/codex-github-local-v2 --help
+.venv/bin/codex-github-local-v2-control --help
+```
 
 ```bash
 cd codex-github-local-v2
@@ -34,11 +46,11 @@ PYTHONPATH=src python3 -m codex_github_local_v2.cli explain examples/audit-reado
 
 ## 当前边界
 
-这仍然不是可替换现役 0.1.0 task watcher 的版本。现在已经有 GitHub Control Issue 的 gh CLI adapter、模型 preflight 子进程、runtime settings 原子持久化、replay ledger、task claim 模型冻结和本地 evidence store。
+这仍然不是可替换现役 0.1.0 task watcher 的版本。现在已经有 GitHub Control Issue 的 gh CLI adapter、模型 preflight 子进程、runtime settings 原子持久化、带待投递回执的 ledger、task claim 模型冻结、本地 evidence store，以及独立 GitWorkspace 创建/范围守卫/候选提交 adapter。
 
 仍未接入完整代码任务链：
 
-- Git worktree 创建与回收；
+- 把已有 GitWorkspace adapter 接入普通任务全流程；
 - [codex] 普通任务的 v2 GitHub watcher；
 - Executor/Reviewer 的真实完整执行循环；
 - wall-clock/stall process supervisor；
@@ -62,7 +74,26 @@ PYTHONPATH=src python3 -m codex_github_local_v2.cli explain examples/audit-reado
 - 真实 Codex exec 最小 preflight wrapper；
 - preflight 成功后才原子写 runtime-settings.json，失败保持旧设置；
 - control-ledger.json 防止旧 Issue 重放；
+- 控制结果和原始回执先原子保存；发送失败后只补发回执，不重复应用或探测模型；
 - 新任务 claim 时把 runtime-default 冻结成 task.resolved.json；
 - GitHub Actions 对纯逻辑、mock adapter 和持久化行为持续跑测试。
 
 后续在电脑端接入时，可以用入口 codex-github-local-v2-control。当前尚未在真实台式机上做 GitHub→Codex 的端到端现场验证。
+
+## 持久化与模型边界
+
+0.0.2 使用 control-ledger **schema 2**，区分动作结果与回执投递状态。旧 schema 1
+没有原始回执快照，不能确定哪些评论丢失；新版会拒绝读取并保留原文件，不自动
+升级或清空。升级运行中的 Host 前，应先停止旧 watcher、备份 runtime/ledger/冻结
+任务，并逐项核对历史 Issue 与回执后进行显式迁移。不能改用空 ledger 重放仍开放
+的历史控制 Issue。本轮没有迁移任何现场状态或启动 watcher。
+
+回执投递前读取全部评论，按 control ID、fingerprint 和完整正文核对。发送账号应
+在 authorized_users 中；响应丢失或投递后本地写入失败可据远端回执恢复。待投递
+结果优先于新命令，即使 Issue 已关闭也会补发；持续投递错误保留证据并阻止接收
+下一条控制。单实例锁仍由命令入口负责。
+
+`model_adapter.py` 是供应商 I/O 契约，当前仅定义可用性 probe；实际实现是
+`CodexProbeRunner`。模型选择、fallback、控制状态和 claim 冻结由 core 决定。
+DeepSeek/OpenAI-compatible adapter、真实生成/流式事件接口尚未实现。
+完整模块职责及 PR 来源见 [INTEGRATION.md](../docs/INTEGRATION.md)。

@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["client", "features", "api-client", "primitives", "tests", "*.ts"]
+  "include": ["client", "features", "visual", "api-client", "primitives", "tests", "*.ts"]
 }

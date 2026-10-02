@@ -33,6 +33,12 @@ class PublicationResult:
 
 
 class Backend(Protocol):
+    """Task workflow I/O, not a model provider. Compose model_adapter here.
+
+    Git validation/review/publication remain workflow operations; provider
+    commands and credentials belong to the injected model adapter.
+    """
+
     def probe_model(self, role: Literal["executor", "reviewer"], choice: ModelChoice) -> ProbeResult: ...
     def execute(self, task: TaskContract, model: ModelChoice, attempt: int) -> ExecutionResult: ...
     def validate(self, task: TaskContract, attempt: int) -> ValidationResult: ...

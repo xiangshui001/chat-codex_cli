@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { ArrowRight, Code2, FileCheck2, ListTodo, Settings2 } from 'lucide-react';
 import { Button, Pill } from '../primitives/Atoms';
-import { LibraryModel } from '../features/LibraryModel';
+import { LibraryModel } from '../visual/LibraryModel';
 import './login.css';
 
 /** An unauthenticated UI preview, with a working transition to the mock workspace. */

@@ -71,9 +71,18 @@ class GhCliControlSource:
         return result
 
     def list_comments(self, issue_number: int) -> list[CommentView]:
-        rows = self._json(
-            ["api", f"repos/{self.repository}/issues/{issue_number}/comments?per_page=100"]
-        )
+        rows = []
+        for page in range(1, 101):
+            batch = self._json([
+                "api", f"repos/{self.repository}/issues/{issue_number}/comments?per_page=100&page={page}"
+            ])
+            if not isinstance(batch, list):
+                raise GhCliError("gh returned an invalid comments page")
+            rows.extend(batch)
+            if len(batch) < 100:
+                break
+        else:
+            raise GhCliError("comment pagination limit reached; refusing incomplete receipt reconciliation")
         return [
             CommentView(
                 comment_id=int(row["id"]),

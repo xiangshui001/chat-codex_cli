@@ -8,7 +8,7 @@ import tempfile
 from typing import Iterable, Literal
 
 from .contract import ModelChoice
-from .routing import ProbeResult
+from .model_adapter import ProbeResult
 
 
 class CodexAdapterError(ValueError):

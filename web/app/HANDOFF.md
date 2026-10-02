@@ -1,5 +1,9 @@
 # React 前端交接
 
+本文记录 PR #5 的历史交付与验证。当前 integration 边界见
+[INTEGRATION.md](../../docs/INTEGRATION.md)；2026-10-02 本机没有 Node/npm，目录
+整理后的前端检查待 Node 环境验证，以下结果不代表本轮重跑。
+
 ## 任务与基线
 
 - 用户授权：将 PR #4 设计参考实现成 React + TypeScript + Vite 前端，先接 MockClient，完成后上传独立 Draft PR。

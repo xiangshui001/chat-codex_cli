@@ -71,6 +71,23 @@ class GhCliAdapterTests(unittest.TestCase):
         self.assertIn("POST", call)
         self.assertTrue(any(value == "body=applied" for value in call))
 
+    def test_comments_beyond_first_page_are_available_for_receipt_recovery(self):
+        first = {"id": 1, "user": {"login": "owner"}, "created_at": "now",
+                 "updated_at": "now", "body": "discussion"}
+        pages = []
+
+        def runner(argv):
+            pages.append(argv[-1])
+            if argv[-1].endswith("page=1"):
+                return json.dumps([first] * 100)
+            if argv[-1].endswith("page=2"):
+                return json.dumps([{**first, "id": 101, "body": "receipt"}])
+            raise AssertionError(argv)
+
+        source = GhCliControlSource("owner/repo", runner=runner)
+        self.assertEqual(source.list_comments(43)[-1].body, "receipt")
+        self.assertEqual(len(pages), 2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,12 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .contract import ModelChoice, RoleModelPolicy
-
-
-@dataclass(frozen=True)
-class ProbeResult:
-    available: bool
-    reason: str = ""
+from .model_adapter import ProbeResult
 
 
 @dataclass(frozen=True)
