@@ -6,13 +6,8 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from codex_github_local_v2.github_control import CommentView, IssueView
-from codex_github_local_v2.github_task import (
-    GitHubTaskError,
-    GitHubTaskPending,
-    TASK_MARKER,
-    validate_task_issue,
-)
+from codex_github_local_v2.github_protocol import CommentView, IssueView
+from codex_github_local_v2.github_protocol import GitHubTaskError, GitHubTaskPending, TASK_MARKER, validate_task_issue
 
 
 def payload(issue=51):

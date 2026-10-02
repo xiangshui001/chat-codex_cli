@@ -10,23 +10,16 @@ sys.path.insert(0, str(ROOT / "src"))
 from codex_github_local_v2.control import (
     ControlCommand,
     ControlError,
-    RuntimeSettings,
-    apply_control,
-    parse_control_comment,
-)
-from codex_github_local_v2.evidence import EvidenceStore
-from codex_github_local_v2.github_control import (
-    CommentView,
-    GitHubControlError,
-    IssueView,
-    validate_control_issue,
-)
-from codex_github_local_v2.routing import ProbeResult
-from codex_github_local_v2.runtime_settings import (
     RuntimeControlService,
+    RuntimeSettings,
     RuntimeSettingsError,
     RuntimeSettingsStore,
+    apply_control,
+    validate_control_issue,
 )
+from codex_github_local_v2.evidence import EvidenceStore
+from codex_github_local_v2.github_protocol import CommentView, GitHubControlError, IssueView, parse_authorization
+from codex_github_local_v2.routing import ProbeResult
 
 
 def model_command(issue=43, role="both", model="supported-model", effort="high"):
@@ -59,7 +52,7 @@ class StrictControlTests(unittest.TestCase):
   }
 }
 ~~~"""
-        parsed = parse_control_comment(body)
+        parsed = ControlCommand.from_dict(parse_authorization(body, "/codex-local control"))
         self.assertEqual(parsed.action, "status")
 
     def test_unknown_control_field_is_rejected(self):

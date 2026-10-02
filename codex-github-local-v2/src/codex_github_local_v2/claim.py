@@ -1,16 +1,34 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-from pathlib import Path
+from dataclasses import asdict, replace
 
-from .contract import TaskContract
+from .contract import ModelChoice, ModelPolicy, RoleModelPolicy, TaskContract
+from .control import RuntimeSettings, RuntimeSettingsStore
 from .evidence import EvidenceStore
-from .resolution import resolve_task_models
-from .runtime_settings import RuntimeSettingsStore
+
+RUNTIME_DEFAULT = "runtime-default"
 
 
 class ClaimPaused(RuntimeError):
     pass
+
+
+def _resolve_role(policy: RoleModelPolicy, default: ModelChoice) -> RoleModelPolicy:
+    resolve = lambda choice: default if choice.name == RUNTIME_DEFAULT else choice
+    return RoleModelPolicy(
+        primary=resolve(policy.primary),
+        fallbacks=tuple(resolve(choice) for choice in policy.fallbacks),
+    )
+
+
+def resolve_task_models(task: TaskContract, settings: RuntimeSettings) -> TaskContract:
+    return replace(
+        task,
+        model_policy=ModelPolicy(
+            executor=_resolve_role(task.model_policy.executor, settings.model_for("executor")),
+            reviewer=_resolve_role(task.model_policy.reviewer, settings.model_for("reviewer")),
+        ),
+    )
 
 
 def freeze_claim(
@@ -19,8 +37,6 @@ def freeze_claim(
     settings_store: RuntimeSettingsStore,
     evidence: EvidenceStore,
 ) -> TaskContract:
-    """Resolve mutable runtime defaults exactly once when a task is claimed."""
-
     settings = settings_store.load()
     if settings.paused:
         raise ClaimPaused("runtime is paused; new tasks are not claimed")

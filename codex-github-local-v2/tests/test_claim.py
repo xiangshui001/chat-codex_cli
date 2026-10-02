@@ -8,9 +8,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from codex_github_local_v2.claim import ClaimPaused, freeze_claim
 from codex_github_local_v2.contract import TaskContract
-from codex_github_local_v2.control import RuntimeSettings
+from codex_github_local_v2.control import RuntimeSettings, RuntimeSettingsStore
 from codex_github_local_v2.evidence import EvidenceStore
-from codex_github_local_v2.runtime_settings import RuntimeSettingsStore
 
 
 def task():

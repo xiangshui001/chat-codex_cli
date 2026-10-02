@@ -7,11 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from codex_github_local_v2.contract import TaskContract
-from codex_github_local_v2.control import RuntimeSettings
-from codex_github_local_v2.control_ledger import ControlLedger
-from codex_github_local_v2.control_processor import ControlProcessor
-from codex_github_local_v2.github_control import CommentView, IssueView
-from codex_github_local_v2.resolution import resolve_task_models
+from codex_github_local_v2.control import ControlLedger, ControlProcessor, RuntimeControlService, RuntimeSettings, RuntimeSettingsStore
+from codex_github_local_v2.github_protocol import CommentView, IssueView
+from codex_github_local_v2.claim import resolve_task_models
 from codex_github_local_v2.routing import ProbeResult
 from codex_github_local_v2.runtime_settings import RuntimeControlService, RuntimeSettingsStore
 

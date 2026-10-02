@@ -8,7 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from codex_github_local_v2.locking import AlreadyRunning, single_instance_lock
-from codex_github_local_v2.runtime_settings import RuntimeSettingsError, RuntimeSettingsStore
+from codex_github_local_v2.control import RuntimeSettingsError, RuntimeSettingsStore
 
 
 class RuntimeSettingsHardeningTests(unittest.TestCase):

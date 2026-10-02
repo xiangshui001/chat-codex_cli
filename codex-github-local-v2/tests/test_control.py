@@ -10,8 +10,8 @@ from codex_github_local_v2.control import (
     ControlError,
     RuntimeSettings,
     apply_control,
-    parse_control_comment,
 )
+from codex_github_local_v2.github_protocol import parse_authorization
 
 
 def command(action="set-default-model", **extra):
@@ -90,7 +90,7 @@ class ControlTests(unittest.TestCase):
   }
 }
 ~~~"""
-        parsed = parse_control_comment(body)
+        parsed = ControlCommand.from_dict(parse_authorization(body, "/codex-local control"))
         self.assertEqual(parsed.action, "set-default-model")
         self.assertEqual(parsed.model, "supported")
 
