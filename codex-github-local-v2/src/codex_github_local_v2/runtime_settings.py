@@ -34,17 +34,45 @@ class RuntimeSettingsStore:
     def load(self) -> RuntimeSettings:
         if not self.path.exists():
             return RuntimeSettings()
-        data = json.loads(self.path.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(self.path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RuntimeSettingsError("runtime settings are unreadable or invalid JSON") from exc
+        if not isinstance(data, dict):
+            raise RuntimeSettingsError("runtime settings must be an object")
+        allowed = {"paused", "executor", "reviewer", "revision", "last_control_id"}
+        if set(data) - allowed:
+            raise RuntimeSettingsError("runtime settings contain unknown fields")
+        if type(data.get("paused", False)) is not bool:
+            raise RuntimeSettingsError("paused must be boolean")
         executor = data.get("executor", {})
         reviewer = data.get("reviewer", {})
+        if not isinstance(executor, dict) or not isinstance(reviewer, dict):
+            raise RuntimeSettingsError("executor and reviewer settings must be objects")
+        for name, role in (("executor", executor), ("reviewer", reviewer)):
+            if set(role) - {"model", "effort"}:
+                raise RuntimeSettingsError(f"{name} settings contain unknown fields")
+            model = role.get("model", "auto")
+            if not isinstance(model, str) or not model or len(model) > 160:
+                raise RuntimeSettingsError(f"{name} model must be a non-empty string up to 160 characters")
+        revision = data.get("revision", 0)
+        if not isinstance(revision, int) or isinstance(revision, bool) or revision < 0:
+            raise RuntimeSettingsError("revision must be a non-negative integer")
+        last_control_id = data.get("last_control_id")
+        if last_control_id is not None and (
+            not isinstance(last_control_id, str)
+            or not last_control_id.startswith("GH-")
+            or not last_control_id[3:].isdigit()
+        ):
+            raise RuntimeSettingsError("last_control_id must be null or GH-N")
         return RuntimeSettings(
-            paused=bool(data.get("paused", False)),
-            executor_model=str(executor.get("model", "auto")),
+            paused=data.get("paused", False),
+            executor_model=executor.get("model", "auto"),
             executor_effort=_effort(executor.get("effort", "medium")),
-            reviewer_model=str(reviewer.get("model", "auto")),
+            reviewer_model=reviewer.get("model", "auto"),
             reviewer_effort=_effort(reviewer.get("effort", "high")),
-            revision=int(data.get("revision", 0)),
-            last_control_id=data.get("last_control_id"),
+            revision=revision,
+            last_control_id=last_control_id,
         )
 
     def save(self, settings: RuntimeSettings) -> None:
