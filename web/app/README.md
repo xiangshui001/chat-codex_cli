@@ -1,17 +1,18 @@
 # chat-codex v2 React 前端
 
 React + TypeScript + Vite 管理界面，参考 [Draft PR #4](https://github.com/xiangshui001/chat-codex_cli/pull/4)
-的视觉和交互规格。当前只接内存 MockClient，可长期迭代正式前端结构；真实 HTTP API、
-Codex Host 和登录尚未接入。
+的视觉和交互规格。默认接内存 MockClient；第二阶段新增显式 local-smoke HttpClient
+与本机 HTTP/core 验证入口。生产 API、真实 Codex Host 和登录尚未接入。
 
 ## 运行
 
 需要 Node.js >=22.12.0。历史 PR 验证使用 24.19.0；package-lock 为版本 3，使用
 支持该格式的 npm，仓库未单独锁定 npm 版本。优先对齐 Node 24 系列并记录其 npm。
 
-2026-10-02 integration 维护环境没有 Node/npm，本轮只做静态审查和目录整理。
-下文 build、11 项 unit、19 项 E2E 和 2 项 dev 检查均为原 PR 的历史证据；目录
-变更后的本机结果统一标记为 **待 Node 环境验证**。本轮没有安装或修改系统环境。
+第一阶段缺 Node/npm，仅做静态整理；第二阶段使用用户级 nvm、Node 24.21.0。
+`.nvmrc` 固定版本，先 `source "$HOME/.nvm/nvm.sh"`、`nvm use` 再执行命令。
+没有修改系统包或 shell 初始化文件。下文原 PR 截图仍是历史证据；第二阶段
+运行方式、真实/替身边界见 [HARNESS_VALIDATION.md](../../docs/HARNESS_VALIDATION.md)。
 
 ```bash
 cd web/app
@@ -31,7 +32,8 @@ npm run preview
 ```
 
 与离线 HTML 设计稿不同，这个 React 应用需要通过 HTTP 服务打开。
-状态存在 MockClient 内存里，刷新页面重置；亮/暗主题偏好单独保存在浏览器。
+默认演示的状态存在 MockClient 内存里，刷新页面重置；HTTP local-smoke 的状态由
+Harness 持久化。亮/暗主题偏好单独保存在浏览器。
 
 ## 已实现
 
@@ -45,7 +47,7 @@ npm run preview
 - Capabilities：权限边界说明与路由守卫，未实现成员编辑或认证。
 - 手机抽屉导航、键盘焦点约束、Escape、Ctrl/Cmd+K 搜索和亮/暗主题。
 
-所有任务、PR、模型目录、Host、心跳和回执都是虚构演示数据，使用
+默认 Mock 场景的任务、PR、模型目录、Host、心跳和回执都是虚构演示数据，使用
 `demo/codex-workbench`；它们不对应本仓库的真实 Issue/PR/执行记录。
 
 未登录页只有演示状态切换。按钮可以进入现有 Mock 工作区；没有真实账号、
@@ -84,7 +86,10 @@ npm run preview
 
 数据按 React 页面 → useWorkspace → ChatCodexClient → MockClient 流动。
 模拟控制效果集中在 MockClient；页面不会自行改变任务、RuntimeSettings 或证据。
-没有 HTTP 实现，也没有请求失败时自动切换 transport 的机制。
+新增 `api-client/http.ts` 通过真实 fetch 实现同一接口，仅在 URL 显式选择
+`?harness=local-smoke` 时注入；生产 HTTP/认证仍未实现，没有请求失败自动切换
+transport 的机制。local-smoke 模式不填模拟任务/Host，状态来自实际核心文件，
+页面明确标注确定性 backend。
 
 保持 v2 语义：提交成功不等于 applied；request_id 是不透明的请求标识，
 `control_id/issue_url` 在 mock 中为 null；RuntimeSettings 使用 `model`，合同
@@ -101,6 +106,7 @@ npm run build
 npm test
 npx playwright install chromium
 npm run test:e2e
+npm run test:harness
 npx playwright test --config playwright.dev.config.ts -g 'repeated page entry|leaving during lazy import'
 ```
 
@@ -139,7 +145,8 @@ Vite 开发模式下另外跑过上述两项生命周期/延迟导入检查，Re
 ## 下一步
 
 PR #5 的前端交接见 [HANDOFF.md](HANDOFF.md)，Issue #6 的模型交接见
-[LIBRARY_HANDOFF.md](LIBRARY_HANDOFF.md)。先补很薄的 HTTP adapter 并保留现有 v2 权威控制路径，
-再现场验证 setDefaultModel → GitHub Control Issue → watcher → preflight →
+[LIBRARY_HANDOFF.md](LIBRARY_HANDOFF.md)。本地 HTTP/core 验证已接通；下一步实现生产
+GitHub 身份与请求映射，并保留现有 v2 权威控制路径，再现场验证
+setDefaultModel → GitHub Control Issue → watcher → preflight →
 runtime-settings.json → applied。真实写接口首次开放时就需要单一 Owner 身份校验；
 多人登录/OAuth/仓库权限系统后续再做。本轮未部署或合并任何 PR。

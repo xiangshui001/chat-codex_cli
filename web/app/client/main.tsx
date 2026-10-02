@@ -1,12 +1,15 @@
 import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createMockClient } from '../api-client/mock';
+import { HttpClient } from '../api-client/http';
 import { AppShell } from './AppShell';
 import { LoginPage } from './LoginPage';
 
-// The sole composition point. Replace with HttpClient only when a real API exists.
-// There is deliberately no live-to-mock fallback.
-const { client, demo } = createMockClient();
+// Explicit transport selection. A live failure never switches to mock.
+const localHarness = new URLSearchParams(window.location.search).get('harness') === 'local-smoke';
+const { client, demo } = localHarness
+  ? { client: new HttpClient(), demo: undefined }
+  : createMockClient();
 function PreviewEntry() {
   const isLogin = () => ['', '#', '#/', '#/login', '#login'].includes(window.location.hash);
   const [login, setLogin] = useState(isLogin);
@@ -21,6 +24,7 @@ function PreviewEntry() {
   // Preview routing only. Existing workspace deep links retain their behavior.
   return login ? (
     <LoginPage
+      localHarness={localHarness}
       onEnter={() => {
         window.location.hash = '#/dashboard';
       }}

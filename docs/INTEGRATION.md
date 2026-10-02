@@ -12,7 +12,7 @@ main 的发布状态，也没有整体 merge Draft PR。0.1.0 继续作为完整
 | 任务/控制 core | v2 `contract`、`policy`、`state`、`controller`、`control`、`claim` | 权限和范围、状态转换、动作、幂等 ledger/回执、领取快照；状态的单一来源 |
 | 工作流 I/O | v2 `controller.Backend`、`git_workspace`、`evidence` | 执行/检查/审阅/发布及 Git/证据；Backend 是任务工作流，不是模型供应商 |
 | Model backend | v2 `model_adapter.ModelAdapter`、`codex_adapter.CodexProbeRunner` | 供应商 I/O 和错误映射；目前仅可用性 probe 有真实 Codex subprocess 实现 |
-| Harness / API | `web/app/api-client/{client,types}.ts`；v2 `github_protocol` / `gh_cli` | 前端通信契约、状态/事件投影和控制命令；GitHub adapter 可运行，HTTP 服务/HttpClient 尚未实现 |
+| Harness / API | `web/app/api-client/{client,types,http}.ts`；v2 `github_protocol` / `gh_cli` / `harness` | typed 通信、状态/事件与控制；第二阶段已有隔离 local-smoke HTTP/core，生产 HTTP/GitHub 写入仍未接通 |
 | React frontend | `web/app/client`、`features` | 导航、展示、表单草稿；只经 useWorkspace/ChatCodexClient 调用 Harness，不执行模型或写 runtime |
 | Library / visual | `web/app/visual`、`primitives`、`public/tisu` | 独立视觉呈现；LibraryModel 不依赖任务/模型/控制状态；vendor 保持原件 |
 | GitHub workflow | `.github/workflows`、Issue/PR 协议 | CI 验证与候选交付；人工决定合并，不能替代本地 watcher 或实际模型验证 |
@@ -20,8 +20,8 @@ main 的发布状态，也没有整体 merge Draft PR。0.1.0 继续作为完整
 ```text
 React pages → useWorkspace → ChatCodexClient
                                ├─ MockClient（显式演示/测试）
-                               └─ HttpClient / API（尚未实现）
-                                       ↓ 未来复用授权控制路径
+                               └─ HttpClient / local-smoke Harness（实际 HTTP/core）
+                                       ↓ 隔离、确定性 source；生产 API 待实现
 GitHub Issue/comment → gh_cli / github_protocol → control / claim / controller
                                                     ├─ GitWorkspace / Evidence
                                                     └─ model_adapter → Codex I/O
@@ -68,7 +68,8 @@ DSH 固定来源 `639ed015397290b3745d163aafe02ffee4aa3f84`，按轻依赖原子
 目前 Harness 中没有真实 DeepSeek 或 OpenAI-compatible 后端调用，没有供应商
 HTTP client、endpoint、credential 管理或生成流。DeepSeek 名称来自 DSH 的 UI
 源码/样式版权和来源说明。`api-client/mock.ts` 是内存演示 transport；fixtures
-的模型目录/Host/回执是虚构数据。`client/main.tsx` 只注入 MockClient。
+的模型目录/Host/回执是虚构数据。`client/main.tsx` 默认注入 MockClient；显式
+local-smoke query 注入 HttpClient，模型 probe 使用明确的确定性后端。
 
 PR #4 的 `contracts.ts` 与 API 路由是设计建议，HTML script 是另一套演示实现。
 仅保留 PR #5 的 typed client/DTO 作为当前契约，真实 API 不以 HTML/mock 为后端。
@@ -86,9 +87,11 @@ PR #4 的 `contracts.ts` 与 API 路由是设计建议，HTML script 是另一�
 
 Python CI 继续跑全部 v2 回归，并新增实际 wheel 构建、隔离安装、两个 console
 入口与样例验证。0.1.0 继续用 verify.py。前端 Node >=22.12.0，优先 Node 24，
-lockfileVersion=3；本机缺 Node/npm，本轮 typecheck/build/unit/format/浏览器均
-标记待 Node 环境验证，历史截图不是本轮验证结果。未启用真实 watcher/远端写入。
+lockfileVersion=3；第一阶段缺 Node，第二阶段用户级 nvm/Node 24.21.0 已用于实际
+验证，运行与 migration function 见 [HARNESS_VALIDATION.md](HARNESS_VALIDATION.md)。
+历史截图仍为历史证据。未启用现场 watcher/远端写入。
 
 现场升级前必须按 [v2 README](../codex-github-local-v2/README.md) 核对 schema 1
-ledger；不清空历史防重放状态。后续先补 Node 验证和 Codex 隔离 probe 的实际
-运行条件，再接薄只读 API、单一 Owner 控制接口，最后按证据完善 v2 执行链。
+ledger；不清空历史防重放状态。Node 与本地 HTTP/core 已验证。后续先定义真实
+模型生成接口与 adapter，再核对 Codex 隔离 probe 的实际运行条件、生产 GitHub
+身份/请求映射和单一 Owner 授权，最后按证据完善 v2 普通任务执行链。

@@ -27,6 +27,8 @@ export interface Session {
   role: Role;
   capabilities: Capability[];
   data_origin: 'mock' | 'live';
+  execution_mode?: 'local-smoke';
+  pending_control?: ControlRequest | null;
 }
 export interface RuntimeSettings {
   paused: boolean;

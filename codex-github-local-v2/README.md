@@ -16,7 +16,7 @@
 
 仅依赖 Python 3.11+ 标准库。
 
-integration 中的包版本为 **0.0.2**。运行时没有第三方 Python 依赖；构建需要
+integration 中的包版本为 **0.0.3**。运行时没有第三方 Python 依赖；构建需要
 setuptools。安装到独立虚拟环境，不覆盖 0.1.0 的 launcher/profile/runtime：
 
 ```bash
@@ -84,7 +84,8 @@ PYTHONPATH=src python3 -m codex_github_local_v2.cli explain examples/audit-reado
 
 0.0.2 使用 control-ledger **schema 2**，区分动作结果与回执投递状态。旧 schema 1
 没有原始回执快照，不能确定哪些评论丢失；新版会拒绝读取并保留原文件，不自动
-升级或清空。升级运行中的 Host 前，应先停止旧 watcher、备份 runtime/ledger/冻结
+升级或清空。0.0.3 提供显式 migration function/CLI，需完整历史状态和回执核对
+证据，先保留原字节备份再原子替换；不会在启动时执行。升级运行中的 Host 前，应先停止旧 watcher、备份 runtime/ledger/冻结
 任务，并逐项核对历史 Issue 与回执后进行显式迁移。不能改用空 ledger 重放仍开放
 的历史控制 Issue。本轮没有迁移任何现场状态或启动 watcher。
 
@@ -96,4 +97,7 @@ PYTHONPATH=src python3 -m codex_github_local_v2.cli explain examples/audit-reado
 `model_adapter.py` 是供应商 I/O 契约，当前仅定义可用性 probe；实际实现是
 `CodexProbeRunner`。模型选择、fallback、控制状态和 claim 冻结由 core 决定。
 DeepSeek/OpenAI-compatible adapter、真实生成/流式事件接口尚未实现。
+第二阶段增加 loopback-only local-smoke HTTP Harness，复用实际 core/持久化，明确
+使用本地 GitHub source 与 model probe 替身；不是生产 API。运行与迁移见
+[HARNESS_VALIDATION.md](../docs/HARNESS_VALIDATION.md)。
 完整模块职责及 PR 来源见 [INTEGRATION.md](../docs/INTEGRATION.md)。

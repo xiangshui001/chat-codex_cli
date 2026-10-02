@@ -12,6 +12,7 @@ const args = [
 ];
 export default defineConfig({
   testDir: './tests',
+  testIgnore: '**/harness-smoke.spec.ts',
   fullyParallel: false,
   workers: 1,
   reporter: 'list',

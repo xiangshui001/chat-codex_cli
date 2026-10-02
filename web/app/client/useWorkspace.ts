@@ -74,6 +74,29 @@ export function useWorkspace(client: ChatCodexClient, route: WorkspaceRoute) {
     setWorkspace((previous) => ({ ...previous, loading: true, error: null }));
     try {
       const session = await client.getSession();
+      if (!alive.current || sequence !== refreshSequence.current) return;
+      if (session.pending_control && !activeRequest.current) {
+        // Recover server-owned command identity after reload/reconnect, never resubmit.
+        const request = session.pending_control;
+        activeRequest.current = request.request_id;
+        let receipt: ControlReceipt;
+        try {
+          receipt = await client.getControlReceipt(request.request_id);
+          if (waiting(receipt)) receipt = { ...receipt, outcome: 'unknown' };
+        } catch {
+          receipt = {
+            request_id: request.request_id,
+            control_id: null,
+            issue_url: null,
+            settings: null,
+            outcome: 'unknown',
+            message: '连接恢复后仍需查询原控制请求。',
+          };
+        }
+        if (!alive.current || sequence !== refreshSequence.current) return;
+        activeRequest.current = unresolved(receipt) ? request.request_id : null;
+        setControl({ request, receipt, busy: false, error: null });
+      }
       const has = (capability: Capability) => session.capabilities.includes(capability);
       const [runtime, tasks, hosts, models] = await Promise.all([
         has('runtime:read') ? client.getRuntimeStatus() : Promise.resolve(null),

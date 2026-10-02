@@ -407,7 +407,11 @@ export function AppShell({ client, demo }: { client: ChatCodexClient; demo?: Moc
               <kbd>⌘ K</kbd>
             </Button>
             <Pill tone="blue">
-              {data?.session.data_origin === 'live' ? 'Live API' : 'Mock API'}
+              {data?.session.execution_mode === 'local-smoke'
+                ? '本地确定性验证'
+                : data?.session.data_origin === 'live'
+                  ? 'Live API'
+                  : 'Mock API'}
             </Pill>
             <Button
               size="sm"

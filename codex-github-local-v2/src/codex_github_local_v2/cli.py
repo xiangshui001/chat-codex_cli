@@ -6,6 +6,9 @@ from pathlib import Path
 import sys
 
 from .contract import ContractError, TaskContract
+from .control import LedgerError
+from .ledger_migration import migrate_control_ledger
+from .locking import AlreadyRunning
 
 
 def load_contract(path: str) -> TaskContract:
@@ -64,12 +67,22 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("validate", "explain"):
         command = sub.add_parser(name)
         command.add_argument("task_json")
+    migration = sub.add_parser("migrate-ledger", help="explicit offline schema 1 -> 2 reconciliation")
+    migration.add_argument("ledger")
+    migration.add_argument("--reconciliation", required=True, help="JSON map with historical settings and receipt_comment per control ID")
+    migration.add_argument("--authorized-user", action="append", required=True)
     args = parser.parse_args(argv)
     try:
+        if args.command == "migrate-ledger":
+            evidence = json.loads(Path(args.reconciliation).read_text(encoding="utf-8"))
+            result = migrate_control_ledger(args.ledger, evidence, authorized_users=args.authorized_user)
+            print(json.dumps({"status": result.status, "records": result.records,
+                              "backup": str(result.backup) if result.backup else None}))
+            return 0
         if args.command == "validate":
             return cmd_validate(args.task_json)
         return cmd_explain(args.task_json)
-    except (OSError, json.JSONDecodeError, ContractError) as exc:
+    except (OSError, json.JSONDecodeError, ContractError, LedgerError, AlreadyRunning) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

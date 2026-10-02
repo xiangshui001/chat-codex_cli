@@ -5,7 +5,13 @@ import { LibraryModel } from '../visual/LibraryModel';
 import './login.css';
 
 /** An unauthenticated UI preview, with a working transition to the mock workspace. */
-export function LoginPage({ onEnter }: { onEnter: () => void }) {
+export function LoginPage({
+  onEnter,
+  localHarness = false,
+}: {
+  onEnter: () => void;
+  localHarness?: boolean;
+}) {
   useEffect(() => {
     document.title = '欢迎 · chat-codex v2';
     try {
@@ -26,7 +32,7 @@ export function LoginPage({ onEnter }: { onEnter: () => void }) {
             chat-codex <small>v2</small>
           </strong>
         </a>
-        <Pill>演示入口</Pill>
+        <Pill>{localHarness ? '本地确定性验证' : '演示入口'}</Pill>
       </header>
       <main className="login-layout">
         <section className="login-copy" aria-labelledby="welcome-title">
@@ -46,9 +52,13 @@ export function LoginPage({ onEnter }: { onEnter: () => void }) {
           </p>
           <div className="login-action">
             <Button variant="primary" onClick={onEnter}>
-              进入演示工作区 <ArrowRight size={17} />
+              {localHarness ? '进入本地验证工作区' : '进入演示工作区'} <ArrowRight size={17} />
             </Button>
-            <p>当前展示模拟任务与控制回执。</p>
+            <p>
+              {localHarness
+                ? '使用本地 HTTP 与核心状态，不调用真实模型。'
+                : '当前展示模拟任务与控制回执。'}
+            </p>
           </div>
           <ul className="login-features">
             <li>

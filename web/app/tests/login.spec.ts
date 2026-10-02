@@ -17,6 +17,9 @@ declare global {
 let errors: string[];
 let external: string[];
 test.beforeEach(async ({ page, baseURL }) => {
+  // Cold software WebGL render/disposal is measured in seconds on this host.
+  // Keep every lifecycle assertion; only allow time for the real renderer.
+  if (process.env.PLAYWRIGHT_SWIFTSHADER === '1') test.setTimeout(120_000);
   errors = [];
   external = [];
   const origin = new URL(baseURL!).origin;
@@ -128,7 +131,12 @@ test('desktop outside model renders without a toolbar, motion or focus trap', as
   await expect(page.getByRole('button', { name: '进入演示工作区' })).toBeFocused();
   await capture(page, 'desktop');
   await page.keyboard.press('Enter');
-  await expect(page.getByRole('heading', { name: '工作区概览', exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/#\/dashboard$/);
+  // Enter changes the URL immediately. Unmount then synchronously disposes a
+  // real WebGL scene; software GL can block the render thread during cleanup.
+  await expect(page.getByRole('heading', { name: '工作区概览', exact: true })).toBeVisible({
+    timeout: process.env.PLAYWRIGHT_SWIFTSHADER === '1' ? 60_000 : 10_000,
+  });
   await released(page);
   expect(consoleErrors).toEqual([]);
 });
@@ -139,6 +147,11 @@ test('repeated page entry and breakpoint changes dispose every scene', async ({ 
   await ready(page);
   const firstCount = await page.evaluate(() => window.libraryProbe.contexts.length);
   await page.setViewportSize({ width: 390, height: 844 });
+  // matchMedia -> React effect is asynchronous. The old ready scene also has
+  // one live context, so first await a new generation before asserting cleanup.
+  await expect
+    .poll(() => page.evaluate(() => window.libraryProbe.contexts.length), { timeout: 30_000 })
+    .toBeGreaterThan(firstCount);
   await ready(page);
   await expect
     .poll(() =>
