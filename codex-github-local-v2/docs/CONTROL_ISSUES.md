@@ -76,7 +76,7 @@ resume 恢复新任务领取：
 
 ## status
 
-status 不改变默认模型。未来 GitHub adapter 应向 Issue 回写脱敏状态：
+status 不改变默认模型。当前控制 processor 会向 Issue 回写脱敏状态；完整 task watcher 接入后还会补当前任务阶段：
 
 - paused / running / idle
 - runtime settings revision
@@ -114,6 +114,17 @@ Control Issue 是远程控制面，因此比普通代码任务更敏感：
 - 不自动 merge、不部署；
 - 模型切换失败时保持上一份已知可用配置。
 
-当前原型已经实现：控制协议解析、RuntimeSettings、幂等 apply 逻辑。
+当前原型已经实现：
 
-当前尚未实现：GitHub watcher 对 control Issue 的实际轮询、真实 Codex model preflight、runtime settings 原子落盘和 GitHub 回执。
+- 控制协议严格解析与未知字段拒绝；
+- authorized_users、Issue ID、repository、未编辑唯一授权评论校验；
+- gh CLI 查询控制 Issue、读取评论和发布回执；
+- Codex read-only 最小 model preflight；
+- runtime-settings.json 原子写入，preflight 失败保持原配置；
+- control-ledger.json 防止历史控制 Issue 重放；
+- 串行 ControlProcessor；
+- remote control run-once/watch 命令入口；
+- runtime-default 在新任务 claimed 时冻结为 resolved task；
+- GitHub Actions 的 mock / offline 回归。
+
+尚未完成的是把这套 control watcher 安装到用户台式机并做真实 GitHub→Codex 端到端现场验证，以及把它与完整 v2 普通代码任务 watcher 合并成一个单实例服务。
