@@ -11,7 +11,6 @@ from codex_github_local_v2.control import ControlLedger, ControlProcessor, Runti
 from codex_github_local_v2.github_protocol import CommentView, IssueView
 from codex_github_local_v2.claim import resolve_task_models
 from codex_github_local_v2.routing import ProbeResult
-from codex_github_local_v2.runtime_settings import RuntimeControlService, RuntimeSettingsStore
 
 
 def task_contract():
