@@ -160,6 +160,42 @@ class ProcessorTests(unittest.TestCase):
         self.assertEqual(result.status, "pending")
         self.assertEqual(self.source.posted, [])
 
+    def test_untrusted_control_issue_does_not_starve_authorized_one(self):
+        self.source.issues.append(
+            IssueView(1, "[codex-control] pause", "open", "stranger")
+        )
+        self.source.comments[1] = [
+            CommentView(
+                comment_id=1,
+                author="stranger",
+                created_at="2026-10-02T00:00:00Z",
+                updated_at="2026-10-02T00:00:00Z",
+                body=body(1, "pause"),
+            )
+        ]
+        self.add(43, "pause")
+        result = self.processor.tick()
+        self.assertEqual(result.issue_number, 43)
+        self.assertEqual(result.status, "applied")
+
+    def test_malformed_authorized_issue_does_not_starve_newer_valid_one(self):
+        self.source.issues.append(
+            IssueView(42, "[codex-control] malformed", "open", "owner")
+        )
+        self.source.comments[42] = [
+            CommentView(
+                comment_id=42,
+                author="owner",
+                created_at="2026-10-02T00:00:00Z",
+                updated_at="2026-10-02T00:00:00Z",
+                body="/codex-local control\n~~~json\n{}\n~~~",
+            )
+        ]
+        self.add(43, "pause")
+        result = self.processor.tick()
+        self.assertEqual(result.issue_number, 43)
+        self.assertEqual(result.status, "applied")
+
 
 if __name__ == "__main__":
     unittest.main()
