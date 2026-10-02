@@ -102,11 +102,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser().parse_args(argv)
     if args.probe_timeout < 10 or args.probe_timeout > 300:
         raise SystemExit("--probe-timeout must be between 10 and 300 seconds")
-    if args.command == "run-once":
-        return run_once(args)
-    if args.interval < 10:
+    if args.command == "watch" and args.interval < 10:
         raise SystemExit("--interval must be at least 10 seconds")
-    return watch(args)
+    state_dir = Path(args.state_dir).expanduser()
+    try:
+        with single_instance_lock(state_dir / "control.lock"):
+            if args.command == "run-once":
+                return run_once(args)
+            return watch(args)
+    except AlreadyRunning as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":
