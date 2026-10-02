@@ -77,7 +77,7 @@ class ControlCommand:
             raise ControlError("control.id must match GH-N")
         if action not in _ACTIONS:
             raise ControlError(f"unsupported control action: {action!r}")
-        reason = raw.get("reason", "")
+        expected = ({"id", "action", "reason", "role", "model", "effort"}\n                    if action == "set-default-model" else {"id", "action", "reason"})\n        if not set(raw).issubset(expected) or not {"id", "action"}.issubset(raw):\n            raise ControlError("control contains missing or unknown fields")\n        reason = raw.get("reason", "")
         if not isinstance(reason, str) or len(reason) > 500:
             raise ControlError("control.reason must be a string up to 500 characters")
 
@@ -128,7 +128,7 @@ def parse_control_comment(body: str) -> ControlCommand:
     if not match:
         raise ControlError("control comment must contain exactly one json block and no extra text")
     try:
-        payload = json.loads(match.group(1))
+        payload = json.loads(match.group("body"))
     except json.JSONDecodeError as exc:
         raise ControlError(f"invalid control json: {exc.msg}") from exc
     return ControlCommand.from_dict(payload)
