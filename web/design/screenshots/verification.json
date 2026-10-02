@@ -1,0 +1,47 @@
+{
+  "date": "2026-10-02",
+  "browser": "153.0.8010.0",
+  "desktop": [
+    1440,
+    1080
+  ],
+  "mobile": [
+    390,
+    844
+  ],
+  "data_origin": "mock",
+  "checks": [
+    "dashboard and derived mock counts",
+    "route tasks",
+    "route models",
+    "route hosts",
+    "route evidence",
+    "route reviews",
+    "route members",
+    "task detail and resolved evidence",
+    "separate executor apply and pending state",
+    "claimed task stays frozen after changing defaults",
+    "failed probe preserves confirmed defaults, revision and draft input",
+    "pause is only for new claims",
+    "resume queue",
+    "reviewer has its own control action",
+    "viewer preview disables mutations and hides member route",
+    "direct restricted route is guarded",
+    "reviewer preview is read-only for model control",
+    "operator preview exposes authorized controls",
+    "unclaimed task does not invent resolved evidence",
+    "task search",
+    "specific failure grouping",
+    "dark theme",
+    "keyboard task search",
+    "all seven mobile routes fit viewport and close drawer",
+    "mobile task detail and evidence layout",
+    "standalone file URL",
+    "no page errors or remote asset requests"
+  ],
+  "passed": 27,
+  "page_errors": [],
+  "remote_requests": [],
+  "real_github": false,
+  "real_codex": false
+}
