@@ -60,6 +60,9 @@ class ControlCommand:
     def from_dict(cls, value: Any) -> "ControlCommand":
         if not isinstance(value, dict) or value.get("version") != 2:
             raise ControlError("control envelope requires version=2")
+        if set(value) != {"version", "repository", "control"}:
+            raise ControlError("control envelope contains missing or unknown fields")
+
         repository = value.get("repository")
         if (
             not isinstance(repository, str)
@@ -68,6 +71,7 @@ class ControlCommand:
             or repository.endswith("/")
         ):
             raise ControlError("repository must be OWNER/REPO")
+
         raw = value.get("control")
         if not isinstance(raw, dict):
             raise ControlError("control must be an object")
@@ -77,7 +81,16 @@ class ControlCommand:
             raise ControlError("control.id must match GH-N")
         if action not in _ACTIONS:
             raise ControlError(f"unsupported control action: {action!r}")
-        expected = ({"id", "action", "reason", "role", "model", "effort"}\n                    if action == "set-default-model" else {"id", "action", "reason"})\n        if not set(raw).issubset(expected) or not {"id", "action"}.issubset(raw):\n            raise ControlError("control contains missing or unknown fields")\n        reason = raw.get("reason", "")
+
+        expected = (
+            {"id", "action", "reason", "role", "model", "effort"}
+            if action == "set-default-model"
+            else {"id", "action", "reason"}
+        )
+        if not set(raw).issubset(expected) or not {"id", "action"}.issubset(raw):
+            raise ControlError("control contains missing or unknown fields")
+
+        reason = raw.get("reason", "")
         if not isinstance(reason, str) or len(reason) > 500:
             raise ControlError("control.reason must be a string up to 500 characters")
 
@@ -85,6 +98,8 @@ class ControlCommand:
         model = raw.get("model")
         effort = raw.get("effort")
         if action == "set-default-model":
+            if not {"role", "model", "effort"}.issubset(raw):
+                raise ControlError("set-default-model requires role, model and effort")
             if role not in _ROLES:
                 raise ControlError("set-default-model requires role=executor|reviewer|both")
             try:
@@ -124,7 +139,11 @@ def parse_control_comment(body: str) -> ControlCommand:
     if not lines or lines[0].strip() != CONTROL_MARKER:
         raise ControlError("first line must be /codex-local control")
     rest = "\n".join(lines[1:]).strip()
-    match = re.fullmatch(r"~~~json\s*\n(.*?)\n~~~", rest, flags=re.DOTALL)
+    match = re.fullmatch(
+        r"(?P<fence>\`\`\`|~~~)json\s*\n(?P<body>.*?)\n(?P=fence)",
+        rest,
+        flags=re.DOTALL,
+    )
     if not match:
         raise ControlError("control comment must contain exactly one json block and no extra text")
     try:
@@ -141,11 +160,7 @@ def apply_control(settings: RuntimeSettings, command: ControlCommand) -> Control
         return ControlResult(settings, False, "duplicate control command ignored")
 
     if command.action == "status":
-        updated = replace(
-            settings,
-            revision=settings.revision + 1,
-            last_control_id=command.control_id,
-        )
+        updated = replace(settings, last_control_id=command.control_id)
         return ControlResult(updated, False, "status requested; runtime defaults unchanged")
 
     if command.action == "pause":
