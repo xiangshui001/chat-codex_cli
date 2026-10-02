@@ -7,7 +7,7 @@
 - read_scope / write_scope 分离；
 - protected path 决策；
 - 明确状态机；
-- 模型 preflight + fallback；
+- 模型 preflight + fallback；\n- GitHub Control Issue 协议：可远程切换默认模型/思考强度、pause/resume/status；
 - 任务预算；
 - “验证不可用 → Draft PR / 人工复核”而不是一律 blocked。
 
@@ -46,3 +46,10 @@ PYTHONPATH=src python3 -m codex_github_local_v2.cli explain examples/audit-reado
 这些会通过 adapter 层逐步接入，而不是直接修改 0.1.0。
 
 设计说明见 [../docs/V2架构草案.md](../docs/V2架构草案.md)。
+
+
+## GitHub 控制面原型
+
+现在已加入控制协议核心。示例见 examples/control-set-model.json，协议见 docs/CONTROL_ISSUES.md。
+
+目前已经能在纯 Python 核心中解析和幂等应用 set-default-model / pause / resume / status；真实 GitHub watcher、模型 preflight 和 runtime settings 原子落盘仍属于下一步 adapter 工作。
