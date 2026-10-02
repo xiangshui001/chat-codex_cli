@@ -478,6 +478,16 @@ export function AppShell({ client, demo }: { client: ChatCodexClient; demo?: Moc
                 >
                   演示读取失败
                 </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={workspace.controlLocked}
+                  onClick={() => {
+                    window.location.hash = '#/login';
+                  }}
+                >
+                  查看未登录页
+                </Button>
                 <p className="small muted">角色切换无认证效果；刷新页面重置模拟运行状态。</p>
               </div>
             </details>

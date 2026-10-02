@@ -1,0 +1,173 @@
+{
+  "verified_at": "2026-10-02T05:50:03.211817+00:00",
+  "issue": 6,
+  "baseline_pr": 5,
+  "baseline_commit": "7697b29e19b4b53a20af7e436c3adccecacbd1c9",
+  "source_repository": "xiangshui001/tisu",
+  "source_commit": "7297fcbcc7663f4b51bd41b19ef43e63e1b8aea8",
+  "data_origin": "mock",
+  "browser": "Chromium 153.0.8010.0",
+  "webgl": "Actual WebGL2 renderer via SwiftShader software rendering",
+  "build": {
+    "passed": true,
+    "strict_typecheck": true,
+    "asset_sha256": {
+      "index-C-BvUbHR.js": "319850e480592b796ef6fa3b249017528d398e2baa87e303c1595de4b9d15c5e",
+      "index-B44XWSux.css": "b8fcb735925a0c4929ab6766b07ff1aa88800c391af340eb4afd49efc9be6ae0"
+    }
+  },
+  "unit_tests": {
+    "passed": 11,
+    "failed": 0,
+    "command": "npm test"
+  },
+  "browser_tests": {
+    "passed": 19,
+    "failed": 0,
+    "original_workspace_tests": 12,
+    "new_login_tests": 7,
+    "command": "npm run test:e2e",
+    "page_errors": 0,
+    "external_requests": 0,
+    "success_case_console_errors": 0,
+    "intentional_module_and_webgl_failures": "browser console diagnostics allowed"
+  },
+  "strictmode_dev_checks": {
+    "passed": 2,
+    "failed": 0,
+    "command": "npx playwright test --config playwright.dev.config.ts -g 'repeated page entry|leaving during lazy import'"
+  },
+  "lifecycle_checks": [
+    "idle RAF zero",
+    "one live canvas/context",
+    "all old contexts lost on unmount or breakpoint change",
+    "all ResizeObservers disconnected",
+    "repeated page entry",
+    "cancelled lazy import cannot mount late",
+    "module failure",
+    "WebGL initialization failure",
+    "runtime context loss"
+  ],
+  "interaction_checks": [
+    "keyboard entry",
+    "mobile login before model",
+    "mobile scroll over model",
+    "reduced motion",
+    "320px no document overflow"
+  ],
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 740
+    }
+  ],
+  "screenshots": {
+    "login-desktop.png": {
+      "width": 1440,
+      "height": 1080,
+      "sha256": "69cb9adc8e0f331c9a3da42b0486c2cee511b5a3ec5cd5e2efe7e13f8d87645e"
+    },
+    "login-fallback.png": {
+      "width": 1440,
+      "height": 1080,
+      "sha256": "fc6a87875eb98b2723de141be15d92d37776d341bb1d05151bcdb8210090d6cc"
+    },
+    "login-mobile.png": {
+      "width": 390,
+      "height": 1018,
+      "sha256": "d6859a459b47a6db90b806e78c44e4352159b46c000117d873ba5750f0104af4"
+    }
+  },
+  "screenshots_visually_inspected": true,
+  "vendored_files_match_source": true,
+  "vendored_files": [
+    {
+      "path": "architecture.js",
+      "bytes": 24357,
+      "sha256": "cdf130f48eb3937d97f612700bd69e3648ab8d4d54482ecb43d4b4785f77d266"
+    },
+    {
+      "path": "camera-paths.js",
+      "bytes": 4237,
+      "sha256": "248edf5c6447de11125a3aee70074cf1b1189741235d76daae8abba950ca19d8"
+    },
+    {
+      "path": "details.js",
+      "bytes": 13925,
+      "sha256": "12926c49c0f01d9701b36f66a0fee527e4990878ec6cfa605f63b8ba6f8a181f"
+    },
+    {
+      "path": "element.js",
+      "bytes": 10559,
+      "sha256": "bbfc7c94691210ce9dd68878f7acbcd48b5b19d897635399bc1eea866ceb26fe"
+    },
+    {
+      "path": "index.d.ts",
+      "bytes": 3934,
+      "sha256": "34fedfbfdc88e13698322c4dd6cdb3506f1412a4a6510ffe06a960cfc2c2c70c"
+    },
+    {
+      "path": "index.js",
+      "bytes": 247,
+      "sha256": "d3f5153ee920da674f3dbed3472ac74b26270300f561f4d062af76fea00c8b8c"
+    },
+    {
+      "path": "interior.js",
+      "bytes": 7532,
+      "sha256": "db967827105cc66d03240ee034ef0cf2d4c021ebf6bb03c5416d8c1280e76215"
+    },
+    {
+      "path": "library.js",
+      "bytes": 10750,
+      "sha256": "24590d8ccedda652bd2ce20350ba1646cdb9473ea7ecb0e9aa11d5478d2a98f2"
+    },
+    {
+      "path": "surfaces.js",
+      "bytes": 1146,
+      "sha256": "548d62af47d5ed8053266e29554e97aadb1d82582d410adc4298392bf78e87ce"
+    },
+    {
+      "path": "vendor/THREE-LICENSE.txt",
+      "bytes": 1081,
+      "sha256": "8b378ebe60e2fe500158cb0ac71cb5e8b7d92953c2abcc63a0eb90499653b5bc"
+    },
+    {
+      "path": "vendor/three.core.js",
+      "bytes": 1458113,
+      "sha256": "9edde002b066a9a05676a6127f67735b62baf399bdea529f2f7e31657da769e6"
+    },
+    {
+      "path": "vendor/three.module.js",
+      "bytes": 662772,
+      "sha256": "9052042d676cb0fdc1ddfefe193053f34b7ac0513a616fdac4535d49987812ea"
+    }
+  ],
+  "three_mit_license_retained": true,
+  "core_regression": {
+    "v2_passed": 48,
+    "v1_linux_passed": 53,
+    "v1_skipped": 0,
+    "posix_covered": true
+  },
+  "real_device_gpu_tested": false,
+  "real_mobile_device_tested": false,
+  "frame_rate_benchmark": false,
+  "real_models": false,
+  "real_hosts": false,
+  "real_http_api": false,
+  "real_github_control": false,
+  "authentication": false,
+  "deployed": false,
+  "whitespace_check": {
+    "first_party": "passed",
+    "vendored_source": "upstream whitespace preserved; three.core.js line 49957 has space before tab"
+  }
+}
