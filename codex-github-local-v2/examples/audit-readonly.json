@@ -23,13 +23,13 @@
     ],
     "model_policy": {
       "executor": {
-        "primary": {"name": "auto", "effort": "medium"},
+        "primary": {"name": "runtime-default", "effort": "medium"},
         "fallbacks": [
           {"name": "stable", "effort": "medium"}
         ]
       },
       "reviewer": {
-        "primary": {"name": "auto", "effort": "high"},
+        "primary": {"name": "runtime-default", "effort": "high"},
         "fallbacks": [
           {"name": "stable", "effort": "high"}
         ]
