@@ -1,0 +1,76 @@
+{
+  "verified_at": "2026-10-02T04:37:50.244838+00:00",
+  "baseline_commit": "fe4785840ee41f7df36c0bc3b186302c3d5dcaac",
+  "design_reference_commit": "184acd74da6c2f47a7037282d2a386249e8002f1",
+  "data_origin": "mock",
+  "node": "24.19.0",
+  "browser": "Chromium 153.0.8010.0",
+  "build": {
+    "passed": true,
+    "strict_typecheck": true,
+    "asset_sha256": {
+      "index-BDGtlnEr.js": "570cb637f047bbd7ad07575851358ca2ad8ce8bcf70279705164ccf8bcd6c81c",
+      "index-BLsQnCl5.css": "e1a83c7132617225cd81f6f45cad388e6ca217e8ba82898356ebd409f5f76000",
+      "index-BQGfk_bx.js": "040d16c68ddd2e8cf92428a4311eca8a436ef2c9cc7ec97763d7f99fb009a6d3",
+      "index-C8vFWcPR.js": "7529fe5b6df57bf8dc4cb88d22e0ee5426260baa625d53118758d5828188a15d",
+      "index-DI17QjdQ.css": "536fbc8f7413a664c31d065f009d0ecaf9e28b38c1c90b74d581d7d53759c24e"
+    }
+  },
+  "unit_tests": {
+    "passed": 11,
+    "failed": 0,
+    "command": "npm test"
+  },
+  "browser_tests": {
+    "passed": 12,
+    "failed": 0,
+    "command": "npm run test:e2e",
+    "page_errors": 0,
+    "console_errors": 0,
+    "external_requests": 0
+  },
+  "viewports": [
+    {
+      "width": 1440,
+      "height": 1080
+    },
+    {
+      "width": 390,
+      "height": 844
+    },
+    {
+      "width": 320,
+      "height": 740
+    }
+  ],
+  "screenshots": {
+    "desktop-dark-models.png": {
+      "width": 1440,
+      "height": 1080,
+      "sha256": "24d6bccc28eb989e6e167b76ba64c5b7b13c48fec8fd4f730ace989a5f7622a2"
+    },
+    "desktop-light.png": {
+      "width": 1440,
+      "height": 1261,
+      "sha256": "c976e0e961c68a094a6c4b76b8b10e56540c218a3ebc2e032def53fc51cc4a34"
+    },
+    "mobile-task.png": {
+      "width": 390,
+      "height": 2345,
+      "sha256": "1ac9609a2f05d38950fffb75f32ed0d321b7e09e6acdbdc4a9c64395f4b62a56"
+    }
+  },
+  "screenshots_visually_inspected": true,
+  "core_regression": {
+    "v2_passed": 48,
+    "v1_linux_passed": 53,
+    "v1_skipped": 0,
+    "posix_covered": true
+  },
+  "real_models": false,
+  "real_hosts": false,
+  "real_http_api": false,
+  "real_github_control": false,
+  "authentication": false,
+  "deployed": false
+}
