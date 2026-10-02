@@ -59,7 +59,7 @@ class GhCliControlSource:
                 "--state",
                 "open",
                 "--limit",
-                "100",
+                "1000",
                 "--json",
                 "number,title,state,author",
             ]
