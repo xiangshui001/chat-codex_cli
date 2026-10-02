@@ -65,7 +65,12 @@ class ControlProcessor:
         if not issues:
             return TickResult("idle")
 
+        last_rejection = None
         for issue in issues:
+            # Public repositories may receive look-alike control Issues from strangers.
+            # Ignore them instead of letting an untrusted Issue starve the authorized queue.
+            if issue.author not in self.authorized_users:
+                continue
             comments = list(self.source.list_comments(issue.number))
             marker_comments = [
                 comment
@@ -85,7 +90,8 @@ class ControlProcessor:
             except GitHubControlPending:
                 continue
             except GitHubControlError as exc:
-                return TickResult("rejected", issue.number, str(exc))
+                last_rejection = TickResult("rejected", issue.number, str(exc))
+                continue
 
             existing = self.ledger.get(command.control_id)
             fingerprint = command_fingerprint(command)
@@ -136,4 +142,4 @@ class ControlProcessor:
             )
             return TickResult(outcome, issue.number, applied.result.message)
 
-        return TickResult("pending")
+        return last_rejection or TickResult("pending")
