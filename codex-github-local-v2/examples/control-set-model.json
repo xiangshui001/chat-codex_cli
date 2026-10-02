@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "repository": "OWNER/REPO",
+  "control": {
+    "id": "GH-43",
+    "action": "set-default-model",
+    "role": "both",
+    "model": "MODEL_ID_FROM_LOCAL_CAPABILITY",
+    "effort": "high",
+    "reason": "Use this default for tasks claimed after this command."
+  }
+}
