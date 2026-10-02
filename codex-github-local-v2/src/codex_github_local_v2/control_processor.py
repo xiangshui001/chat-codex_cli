@@ -96,11 +96,7 @@ class ControlProcessor:
                         issue.number,
                         "processed control id reappeared with different content",
                     )
-                return TickResult(
-                    "already_processed",
-                    issue.number,
-                    str(existing.get("outcome", "unknown")),
-                )
+                continue
 
             try:
                 applied = self.runtime.apply(command)
