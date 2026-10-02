@@ -16,6 +16,10 @@ class GitHubControlError(ValueError):
     pass
 
 
+class GitHubControlPending(GitHubControlError):
+    pass
+
+
 @dataclass(frozen=True)
 class IssueView:
     number: int
@@ -44,10 +48,7 @@ def validate_control_issue(
     repository: str,
     authorized_users: Iterable[str],
 ) -> ControlCommand:
-    """Validate a GitHub control issue after the adapter has fetched it.
-
-    This function is intentionally pure: it performs no GitHub writes and no model calls.
-    """
+    """Validate a GitHub control issue after the adapter has fetched it."""
 
     users = set(authorized_users)
     if issue.state != "open":
@@ -57,9 +58,17 @@ def validate_control_issue(
     if not _authorized(issue.author, users):
         raise GitHubControlError("control issue author is not authorized")
 
-    candidates = [comment for comment in comments if comment.body.splitlines()[:1] == [CONTROL_MARKER]]
+    candidates = [
+        comment
+        for comment in comments
+        if comment.body.splitlines()[:1] == [CONTROL_MARKER]
+    ]
+    if not candidates:
+        raise GitHubControlPending("control authorization comment has not been posted yet")
     if len(candidates) != 1:
-        raise GitHubControlError("control issue must contain exactly one control authorization comment")
+        raise GitHubControlError(
+            "control issue must contain exactly one control authorization comment"
+        )
 
     comment = candidates[0]
     if not _authorized(comment.author, users):
