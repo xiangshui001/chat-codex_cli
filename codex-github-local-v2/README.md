@@ -22,7 +22,7 @@ MVP-0 提供独立入口 `codex-github-local-v2-mvp0`：单仓库 Issue → SQLi
 
 仅依赖 Python 3.11+ 标准库。
 
-integration 中的包版本为 **0.0.3**。运行时没有第三方 Python 依赖；构建需要
+当前包版本为 **0.0.5**，包含独立的 MVP-0 / MVP-1 入口。运行时没有第三方 Python 依赖；构建需要
 setuptools。安装到独立虚拟环境，不覆盖 0.1.0 的 launcher/profile/runtime：
 
 ```bash
