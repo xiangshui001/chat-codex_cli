@@ -1,3 +1,5 @@
+> 历史档案：以下记录旧阶段，不作为当前安装说明。[当前版本入口](../../../README.md)。
+
 # GitHub Control Issues
 
 v2 把“执行一个代码任务”和“改变本地 Codex CLI / watcher 默认状态”分成两类 Issue。
@@ -144,4 +146,4 @@ ledger 中“已应用”和“已投递”是独立事实。发送前持久化�
 
 0.0.2 只接受 schema 2，旧 schema 1 保持原文件并报错。现场迁移必须停止旧
 watcher、保留备份、核对历史动作与回执；不得通过删除 ledger 或换空 state-dir
-绕过防重放。详情见 [README](../README.md)。
+绕过防重放。详情见 [README](../../../codex-github-local-v2/README.md)。

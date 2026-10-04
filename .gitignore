@@ -10,5 +10,5 @@ credentials*
 runtime/
 *.log
 *.zip
-codex-github-local/validation/
-codex-github-local/profiles/local*.json
+history/v1/codex-github-local/validation/
+history/v1/codex-github-local/profiles/local*.json

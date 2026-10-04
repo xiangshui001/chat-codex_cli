@@ -1,0 +1,59 @@
+name: Current version checks
+
+on:
+  push:
+    branches:
+      - main
+      - feature/**
+      - integration/**
+    paths:
+      - 'codex-github-local-v2/**'
+      - 'web/app/**'
+      - 'docs/**'
+      - 'history/**'
+      - 'scripts/**'
+      - 'README.md'
+      - '.github/workflows/current-tests.yml'
+  pull_request:
+    paths:
+      - 'codex-github-local-v2/**'
+      - 'web/app/**'
+      - 'docs/**'
+      - 'history/**'
+      - 'scripts/**'
+      - 'README.md'
+      - '.github/workflows/current-tests.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Current backend regression
+        run: python3 -m unittest discover -s codex-github-local-v2/tests -v
+      - name: Archived V1 regression
+        run: |
+          python3 history/v1/codex-github-local/verify.py
+          python3 -c 'import json; r=json.load(open("history/v1/codex-github-local/validation/posix-offline-summary.json")); assert r["passed"] and r["tests_executed"] == 53 and r["skipped"] == 0, r'
+      - name: Validate public guide and current examples
+        run: python3 scripts/check_docs.py
+      - name: Build and smoke-test current installation
+        run: |
+          python3 -m pip wheel --no-deps ./codex-github-local-v2 --wheel-dir "$RUNNER_TEMP/current-wheels"
+          python3 -m venv "$RUNNER_TEMP/current-install"
+          "$RUNNER_TEMP/current-install/bin/python" -m pip install --no-index --find-links "$RUNNER_TEMP/current-wheels" codex-github-local-v2
+          cd "$RUNNER_TEMP"
+          "$RUNNER_TEMP/current-install/bin/codex-github-local-v2" --help
+          "$RUNNER_TEMP/current-install/bin/codex-github-local-v2-mvp2" --help
+          "$RUNNER_TEMP/current-install/bin/codex-github-local-v2-model-api" --help
+          "$RUNNER_TEMP/current-install/bin/codex-github-local-v2-workbench" --help
+          test ! -e "$RUNNER_TEMP/current-install/bin/codex-github-local-v2-mvp1"
+          test ! -e "$RUNNER_TEMP/current-install/bin/codex-github-local-v2-mvp0"
+          test ! -e "$RUNNER_TEMP/current-install/bin/codex-github-local-v2-control"

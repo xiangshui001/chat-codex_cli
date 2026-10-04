@@ -2,7 +2,7 @@
 
 先读 README.md、docs/用户使用手册.md、docs/Chat协作手册.md 和 docs/VALIDATION.md。这是协作工具管理仓库，不是被执行的业务项目。
 
-保留串行执行、人工合并、任务/配置快照、候选一致性验证、blocked 不自动重放与进程清理证据。修改执行逻辑需对应回归测试；运行 `python3 codex-github-local/verify.py`。Windows 跳过 POSIX 项时要明确，不能声明完整 Linux 验证。
+保留串行执行、任务 PR 人工合并、任务/配置快照、候选一致性验证、blocked 不自动重放与进程清理证据。修改执行逻辑需对应回归测试；运行 `python3 -m unittest discover -s codex-github-local-v2/tests -v` 和历史回归 `python3 history/v1/codex-github-local/verify.py`。Windows 跳过 POSIX 项时要明确，不能声明完整 Linux 验证。
 
 示例 profile 保持通用占位符，实际账号、环境配置和运行记录留在本机。不要提交认证、.env、原始模型输出、真实业务数据或其他仓库的运行快照。不可把历史用户回传证据当成本轮亲自执行结果。
 
