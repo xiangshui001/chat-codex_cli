@@ -1,7 +1,7 @@
 """MVP-2 task contract. The Issue carries selections, never credentials or URLs."""
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import hashlib
 import json
 from pathlib import Path
@@ -86,14 +86,20 @@ class DesktopConfig(AccountConfig):
         parallel = data.get("max_parallel_tasks", 1)
         if type(parallel) is not int or not 1 <= parallel <= 16:
             raise MvpError("invalid_max_parallel_tasks")
+        timeout = data.get("timeout_seconds", 900)
+        if type(timeout) is not int or not 1 <= timeout <= 10800:
+            raise MvpError("invalid_timeout_seconds")
         # Reuse the established path/owner validation without loosening MVP-1.
         account_keys = {"owner", "host_id", "workspace_root", "state_dir", "poll_seconds", "timeout_seconds"}
         import tempfile
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", encoding="utf-8", delete=False) as tmp:
-            json.dump({k: v for k, v in data.items() if k in account_keys}, tmp)
+            projection = {k: v for k, v in data.items() if k in account_keys}
+            projection["timeout_seconds"] = min(timeout, 3600)
+            json.dump(projection, tmp)
             tmp_path = Path(tmp.name)
         try:
             account = AccountConfig.load(tmp_path)
+            account = replace(account, timeout_seconds=timeout)
         finally:
             tmp_path.unlink()
         hub = text(data["hub_repo"], 200, "invalid_hub_repo")

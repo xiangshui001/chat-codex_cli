@@ -54,7 +54,7 @@ config = {
     &quot;workspace_root&quot;: str(root / &quot;workspaces&quot;),
     &quot;state_dir&quot;: str(root / &quot;state&quot;),
     &quot;models_file&quot;: str(root / &quot;models.json&quot;),
-    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 3600, &quot;max_parallel_tasks&quot;: 3
+    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 10800, &quot;max_parallel_tasks&quot;: 3
 }
 files = {
     &quot;config.json&quot;: json.dumps(config, ensure_ascii=False, indent=2) + &quot;\n&quot;,

@@ -84,6 +84,13 @@ class ParallelStoreTests(fixtures.Fixture):
                 DesktopConfig.load(path)
         path.write_text(json.dumps({**data, 'max_parallel_tasks': 3}))
         self.assertEqual(DesktopConfig.load(path).max_parallel_tasks, 3)
+        for timeout in (3601, 10800):
+            path.write_text(json.dumps({**data, 'timeout_seconds': timeout}))
+            self.assertEqual(DesktopConfig.load(path).timeout_seconds, timeout)
+        for timeout in (0, 10801, True, 1.5, '10800'):
+            path.write_text(json.dumps({**data, 'timeout_seconds': timeout}))
+            with self.subTest(timeout=timeout), self.assertRaisesRegex(MvpError, 'invalid_timeout_seconds'):
+                DesktopConfig.load(path)
 
 
 @unittest.skipUnless(os.name == 'posix', 'Fork workers require Linux / WSL')
