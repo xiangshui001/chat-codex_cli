@@ -46,6 +46,50 @@ const detail = {
   },
 };
 
+test('MVP-2 shows conversation, chosen model, hub receipt and target PR', async ({ page }) => {
+  const session = '20000000-0000-4000-8000-000000000002';
+  const current = {
+    ...task,
+    state: 'succeeded',
+    summary: '已创建成果 PR',
+    finished_at: task.started_at,
+    issue_url: 'https://github.com/example/codex-cli/issues/8',
+    session_id: session,
+    mode: 'gpt-led',
+    model: 'gpt-6.1-sol',
+    effort: 'high',
+    pr_url: 'https://github.com/example/test/pull/12',
+    receipt_comment_id: 42,
+  };
+  await page.route('**/api/mvp1/**', async (route) => {
+    expect(route.request().method()).toBe('GET');
+    const value = route.request().url().endsWith('overview')
+      ? {
+          source: 'local-mvp2',
+          observed_at: task.created_at,
+          host_id: 'desktop',
+          owner: 'example',
+          listener: 'running',
+          counts: { succeeded: 1 },
+          tasks: [current],
+          limit: 100,
+        }
+      : { ...detail, ...current };
+    await route.fulfill({ json: value });
+  });
+  await page.goto('/');
+  await expect(page.getByText(session, { exact: true })).toBeVisible();
+  await expect(page.getByText('模式：gpt-led · 模型：gpt-6.1-sol · 思考强度：high')).toBeVisible();
+  await expect(page.getByRole('link', { name: '审查成果 PR' })).toHaveAttribute(
+    'href',
+    current.pr_url,
+  );
+  await expect(page.getByRole('link', { name: '查看 GitHub 回执' })).toHaveAttribute(
+    'href',
+    current.issue_url + '#issuecomment-42',
+  );
+});
+
 test('real-mode page refreshes execution and receipt without control writes', async ({ page }) => {
   let complete = false;
   const methods: string[] = [];

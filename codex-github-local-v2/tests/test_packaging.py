@@ -16,6 +16,7 @@ class PackagingTests(unittest.TestCase):
         scripts = metadata["project"]["scripts"]
         self.assertEqual(set(scripts), {"codex-github-local-v2", "codex-github-local-v2-control",
                                        "codex-github-local-v2-mvp0", "codex-github-local-v2-mvp1",
+                                       "codex-github-local-v2-mvp2", "codex-github-local-v2-model-api",
                                        "codex-github-local-v2-workbench"})
         for target in scripts.values():
             module, function = target.split(":")

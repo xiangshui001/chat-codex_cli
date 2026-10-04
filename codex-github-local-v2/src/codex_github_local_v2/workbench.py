@@ -1,4 +1,4 @@
-"""Loopback-only, read-only projection of real MVP-1 state and Codex JSONL."""
+"""Loopback-only, read-only projection of real MVP-1 / MVP-2 state and JSONL."""
 from __future__ import annotations
 
 import argparse
@@ -81,16 +81,20 @@ def progress(path: Path):
 
 
 class Reader:
+    database_name = 'mvp1.sqlite3'
+    schema_version = 2
+    source = 'local-mvp1'
+    task_select = 'SELECT * FROM tasks'
     def __init__(self, config: AccountConfig):
         self.config = config
 
     def connect(self):
-        path = self.config.state_dir / 'mvp1.sqlite3'
+        path = self.config.state_dir / self.database_name
         db = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True, timeout=2)
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         try:
-            if db.execute('PRAGMA user_version').fetchone()[0] != 2:
+            if db.execute('PRAGMA user_version').fetchone()[0] != self.schema_version:
                 raise ValueError('Unsupported state schema')
             binding = db.execute('SELECT owner,host_id,workspace_root FROM settings WHERE id=1').fetchone()
             if binding is None or tuple(binding) != (self.config.owner, self.config.host_id, str(self.config.workspace_root)):
@@ -129,10 +133,10 @@ class Reader:
         try:
             db.execute('BEGIN')
             counts = dict(db.execute('SELECT state,COUNT(*) FROM tasks GROUP BY state'))
-            tasks = [self.task(r) for r in db.execute('SELECT * FROM tasks ORDER BY id DESC LIMIT 100')]
+            tasks = [self.task(r) for r in db.execute(self.task_select + ' ORDER BY tasks.id DESC LIMIT 100')]
         finally:
             db.close()
-        return {'source': 'local-mvp1', 'observed_at': datetime.now(timezone.utc).isoformat(),
+        return {'source': self.source, 'observed_at': datetime.now(timezone.utc).isoformat(),
                 'host_id': self.config.host_id, 'owner': self.config.owner, 'listener': self.listener(),
                 'counts': counts, 'tasks': tasks, 'limit': 100}
 
@@ -142,14 +146,15 @@ class Reader:
         db = self.connect()
         try:
             db.execute('BEGIN')
-            row = db.execute('SELECT * FROM tasks WHERE request_id=?', (request_id,)).fetchone()
+            row = db.execute(self.task_select + ' WHERE tasks.request_id=?', (request_id,)).fetchone()
             if row is None:
                 raise KeyError(request_id)
             result = self.task(row)
             result.update(write_paths=json.loads(row['write_paths']), cwd=row['cwd'],
                           events=[{'kind': r['kind'], 'at': r['at']} for r in db.execute(
                               'SELECT kind,at FROM events WHERE task_id=? ORDER BY id LIMIT 500', (row['id'],))])
-            repository_id = row['repository_id']
+            repository_id = row['target_id'] if self.schema_version == 3 else row['repository_id']
+            diff_base = row['base_sha'] if self.schema_version == 3 else 'HEAD'
         finally:
             db.close()
         evidence = self.config.state_dir / 'runs' / request_id
@@ -170,12 +175,29 @@ class Reader:
                 def git(*args):
                     return subprocess.run(['git', '--no-optional-locks', '-C', str(workspace), *args],
                         check=True, capture_output=True, timeout=3).stdout.decode('utf-8', errors='replace')
-                files = set(git('diff', '--name-only', '--no-renames', '-z', 'HEAD', '--').split('\0'))
+                files = set(git('diff', '--name-only', '--no-renames', '-z', diff_base, '--').split('\0'))
                 files.update(git('ls-files', '--others', '--exclude-standard', '-z').split('\0'))
                 result['files'] = [clean(x, 500) for x in sorted(files - {''})][:500]
             except (OSError, subprocess.SubprocessError):
                 result['files_error'] = '暂时无法读取 Git 文件变化'
         return result
+
+
+class DesktopReader(Reader):
+    database_name = 'mvp2.sqlite3'
+    schema_version = 3
+    source = 'local-mvp2'
+    task_select = 'SELECT tasks.*,deliveries.* FROM tasks JOIN deliveries ON deliveries.task_id=tasks.id'
+
+    @staticmethod
+    def task(row):
+        value = Reader.task(row)
+        options = json.loads(row['options_json'])
+        value.update(issue_url=f"https://github.com/{row['source_repo']}/issues/{row['issue_number']}",
+                     session_id=row['session_id'], mode=options['models']['mode'],
+                     model=options['models']['primary']['model'], effort=options['models']['primary']['effort'],
+                     pr_url=row['pr_url'], commit_sha=row['commit_sha'], publication_state=row['publication_state'])
+        return value
 
 
 def create_server(reader: Reader, dist: Path, port: int):
@@ -251,10 +273,15 @@ def main(argv=None):
     parser.add_argument('--config', required=True, type=Path)
     parser.add_argument('--dist', required=True, type=Path)
     parser.add_argument('--port', default=8791, type=int)
+    parser.add_argument('--protocol', choices=('mvp1', 'mvp2'), default='mvp1')
     args = parser.parse_args(argv)
     if not (args.dist / 'index.html').is_file():
         parser.error('Build web/app first (npm run build)')
-    reader = Reader(AccountConfig.load(args.config))
+    if args.protocol == 'mvp2':
+        from .mvp2_contract import DesktopConfig
+        reader = DesktopReader(DesktopConfig.load(args.config))
+    else:
+        reader = Reader(AccountConfig.load(args.config))
     reader.overview()  # Refuse a wrong database before opening the server.
     with create_server(reader, args.dist, args.port) as server:
         print(f'本机真实任务工作台：http://127.0.0.1:{server.server_port}/?view=live', flush=True)

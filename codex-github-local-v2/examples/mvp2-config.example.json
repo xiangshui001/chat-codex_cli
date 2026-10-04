@@ -1,0 +1,10 @@
+{
+  "owner": "OWNER",
+  "host_id": "desktop",
+  "hub_repo": "OWNER/codex-cli",
+  "workspace_root": "/home/USER/codex-mvp2-workspaces",
+  "state_dir": "/home/USER/.local/state/chat-codex-mvp2",
+  "models_file": "/home/USER/.config/chat-codex/models.json",
+  "poll_seconds": 60,
+  "timeout_seconds": 900
+}

@@ -29,9 +29,15 @@ type Task = {
   exit_code: number | null;
   receipt_comment_id: number | null;
   diff_nonempty: number | null;
+  session_id?: string | null;
+  mode?: 'gpt' | 'api' | 'gpt-led';
+  model?: string;
+  effort?: string;
+  pr_url?: string | null;
+  publication_state?: string;
 };
 type Overview = {
-  source: 'local-mvp1';
+  source: 'local-mvp1' | 'local-mvp2';
   observed_at: string;
   host_id: string;
   owner: string;
@@ -78,6 +84,12 @@ const stages: Record<string, string> = {
   receipt_sent: '已回写 Issue',
   cleanup_failed: '进程清理需要检查',
   interrupted_cleanup_unknown: '中断后需要人工检查',
+  session_saved: '对话上下文已保存',
+  execution_completed: '执行与文件检查已完成',
+  publication_updated: '更新 PR 发布进度',
+  publication_pending: '等待补做 PR 发布',
+  api_file_tool: 'API 模型操作文件',
+  model_consulted: 'GPT 已向协作模型提问',
 };
 const time = (value: string | null) =>
   value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未发生';
@@ -114,7 +126,10 @@ export function LiveWorkbench() {
     async function refresh() {
       try {
         const snapshot = await request<Overview>('overview');
-        if (snapshot.source !== 'local-mvp1' || !Array.isArray(snapshot.tasks))
+        if (
+          !['local-mvp1', 'local-mvp2'].includes(snapshot.source) ||
+          !Array.isArray(snapshot.tasks)
+        )
           throw new Error('服务返回了不匹配的数据来源');
         if (stopped) return;
         setOverview(snapshot);
@@ -298,6 +313,24 @@ export function LiveWorkbench() {
                         : '等待执行结果。')}
                   </strong>
                   {detail.error && <p className="live-failure">{detail.error}</p>}
+                  {detail.model && (
+                    <span>
+                      模式：{detail.mode} · 模型：{detail.model} · 思考强度：{detail.effort}
+                    </span>
+                  )}
+                  {detail.session_id && (
+                    <span>
+                      对话 ID：<code>{detail.session_id}</code>
+                    </span>
+                  )}
+                  {detail.pr_url && (
+                    <a className="live-link" href={detail.pr_url} target="_blank" rel="noreferrer">
+                      审查成果 PR <ArrowUpRight size={14} />
+                    </a>
+                  )}
+                  {detail.publication_state && !detail.finished_at && (
+                    <span>成果发布：{detail.publication_state}</span>
+                  )}
                   <span>
                     CLI：{detail.cli_version ?? '尚未启动'} · 退出码：
                     {detail.exit_code ?? '尚未结束'}

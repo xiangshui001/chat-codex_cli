@@ -1,0 +1,26 @@
+{
+  "providers": {
+    "openai": {
+      "kind": "gpt",
+      "base_url": "https://api.openai.com/v1",
+      "api_key_env": "OPENAI_API_KEY",
+      "wire_api": "responses",
+      "models": ["gpt-6.1-sol"],
+      "reasoning_parameter": "reasoning.effort",
+      "effort_map": {"low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh"}
+    },
+    "other": {
+      "kind": "other",
+      "base_url": "https://PROVIDER.example/v1",
+      "api_key_env": "OTHER_MODEL_API_KEY",
+      "wire_api": "chat_completions",
+      "models": ["OTHER_MODEL"],
+      "reasoning_parameter": "reasoning_effort",
+      "effort_map": {"low": "low", "medium": "medium", "high": "high"}
+    }
+  },
+  "max_turns": 12,
+  "max_calls": 8,
+  "request_timeout": 120,
+  "max_output_tokens": 8192
+}

@@ -9,6 +9,7 @@ on:
       - integration/**
       - feature/v2-mvp0-issue-to-codex
       - feature/v2-mvp1-account-repositories
+      - feature/desktop-sessions-model-api-pr
     paths:
       - 'codex-github-local-v2/**'
       - 'web/app/**'
@@ -54,4 +55,6 @@ jobs:
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-control" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp0" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp1" --help
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp2" --help
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-model-api" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-workbench" --help
