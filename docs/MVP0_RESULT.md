@@ -39,12 +39,14 @@
 | 环境 | 本轮证据 | 不代表什么 |
 | --- | --- | --- |
 | 本电脑：Windows，Python 3.11.9，Git 2.55.0.windows.3 | 能调用 Codex CLI 0.160.0 的版本与帮助；未发现 gh，本电脑没有已安装的 WSL 发行版。MVP 单测 42 项：35 通过、7 个 POSIX 项明确跳过 | 不代表 CLI 已完成真实任务；不代表台式机的安装/登录状态 |
-| Linux CI | 待 feature 分支 CI 完成后补充；使用离线 CLI 子进程夹具，无真实模型登录 | 不代表真实 GitHub → Codex → 回执 smoke，更不代表台式机 WSL |
+| GitHub Actions Linux CI：Ubuntu 24.04.5，Python 3.11.16 | [run 37186065163](https://github.com/xiangshui001/chat-codex_cli/actions/runs/37186065163) 成功；实现提交 `f3a1033`。V2 共 124 项通过，含 MVP-0 的 42 项，0 跳过；V1 53 项全部通过；公共示例与构建、安装后三个入口检查通过。使用离线 CLI 子进程夹具，无真实模型登录 | 不代表真实 GitHub → Codex → 回执 smoke，更不代表台式机 WSL |
 | 台式机 WSL | 未访问、未运行；工作区、登录、实际 CLI 版本、常驻与进程行为尚未验证 | 不沿用本电脑或 CI 的通过结论 |
 
 单测覆盖合法/非法字段、错误 host/repo、作者允许名单、重复授权/编辑、重复 request_id/Issue、并发 SQLite 领取、事务回滚、stale base、成功/失败、回执生成与补发、分页/PR 过滤、范围与工作区核对。POSIX 子进程用例另验证独立日志、超时子进程清理、非零退出、JSONL、item.completed 和日志上限。
 
-本电脑运行未修改的 `python codex-github-local/verify.py`：V1 共发现 53 项，27 通过、26 个 POSIX 项跳过，0 失败、0 错误。CI 也运行未修改的 V1 53 项回归和 V2 安装入口检查；不能以 Windows 跳过项宣称完整 Linux 验证。
+本电脑运行未修改的 `python codex-github-local/verify.py`：V1 共发现 53 项，27 通过、26 个 POSIX 项跳过，0 失败、0 错误。上述 Linux CI 独立运行同一 V1 检查：53 通过、0 跳过、0 失败、0 错误。Windows 跳过项不计入 Linux 通过数量。
+
+实现提交 `f3a1033` 的 Git tree 为 `eaee6d5ac02948f3451df96bc81bc491da4d3bd6`，与本电脑离线测试后本地提交的内容完全一致。后续提交只补充本报告的 CI 事实；不改变已经验证的运行代码。相对设计基线，`codex-github-local/` 和原有 V2 设计文档无差异；main 与设计分支未更新。
 
 ## 真实 smoke
 
