@@ -198,7 +198,9 @@ class ApiFileRunner:
                         "Finish required artifact writes now, then give your final answer without tool calls. "
                         "Prioritize delivery over further exploration; disclose incomplete coverage rather than invent findings."})
                 turns_used = turn + 1
+                record('api_model_request', {'turn': turns_used, 'max_turns': max_turns})
                 result = self.client.call(chosen, history, FILE_TOOLS, timeout=deadline-time.monotonic())
+                record('api_model_response', {'turn': turns_used, 'max_turns': max_turns})
                 history.extend(result["history"])
                 if len(json.dumps(history, ensure_ascii=False).encode()) > 1024 * 1024:
                     raise MvpError("api_context_limit")
@@ -214,11 +216,13 @@ class ApiFileRunner:
                     if time.monotonic() >= deadline:
                         raise MvpError("execution_timeout")
                     try:
-                        value = files.call(call["name"], read_json(call["arguments"]))
+                        arguments = read_json(call["arguments"])
+                        value = files.call(call["name"], arguments)
                     except (MvpError, OSError, UnicodeError) as exc:
                         value = {"error": str(exc) if isinstance(exc, MvpError) else "file_tool_failed"}
                     record("api_file_tool", {"name": call["name"], "turn": turns_used,
                                              "max_turns": max_turns, "ok": "error" not in value,
+                                             **({'path': arguments['path']} if 'error' not in value and 'path' in arguments else {}),
                                              **({"error": value["error"]} if "error" in value else {})})
                     history.append(tool_result(result["wire_api"], call["id"], value))
                     if call["name"] in {"write_file", "delete_file"} and "error" not in value:

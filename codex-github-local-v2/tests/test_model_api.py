@@ -230,7 +230,7 @@ class ModelApiTests(ApiFixture):
         self.queue = [chat(None, [function('read_file', {'path': 'missing.txt'}, str(i))]) for i in range(4)]
         recorded = []
         result, _, history = ApiFileRunner(self.registry).run_task(
-            task, workspace, self.root/'run', 10, lambda kind, value: recorded.append(value))
+            task, workspace, self.root/'run', 10, lambda kind, value: recorded.append(value) if kind == 'api_file_tool' else None)
         self.assertEqual(result.error, 'model_turn_limit')
         self.assertIsNone(history)
         self.assertFalse(any(item['ok'] for item in recorded))

@@ -191,6 +191,54 @@ class PollerTests(Fixture):
         self.assertEqual(self.p.once(), 0)
         self.assertIsNone(self.s.unfinished())
         self.runner.run.assert_not_called()
+        self.assertEqual(DesktopReader(self.config).overview()['monitor']['rejected'], [])
+
+    def test_unregistered_model_is_visible_without_claim_or_execution(self):
+        self.models.write_text(json.dumps({'providers': {'other': {
+            'kind': 'other', 'base_url': 'http://127.0.0.1:8317/v1', 'api_key_env': 'TEST_KEY',
+            'wire_api': 'chat_completions', 'models': ['example-model'], 'effort_map': {'high': 'high'}}}}))
+        from codex_github_local_v2.model_api import ModelRegistry
+        self.p.registry = ModelRegistry(self.models)
+        self.payload['models'] = {'mode': 'api', 'primary': {'provider': 'other', 'model': 'Example-Model', 'effort': 'max'}}
+        self.assertEqual(self.p.once(), 0)
+        view = DesktopReader(self.config).overview()
+        self.assertEqual(view['counts'], {})
+        self.assertEqual(view['monitor']['phase'], 'idle')
+        rejection = view['monitor']['rejected'][0]
+        self.assertEqual(rejection['issue_url'], 'https://github.com/owner/codex-cli/issues/3')
+        self.assertEqual(rejection['reason'], 'model_not_allowed')
+        self.assertEqual(rejection['suggested_model'], 'example-model')
+        self.assertEqual(rejection['allowed_efforts'], ['high'])
+        self.runner.run.assert_not_called()
+
+    def test_poll_network_error_is_visible_and_still_raises(self):
+        self.gh.repositories.side_effect = MvpError('github_api_failed')
+        with self.assertRaisesRegex(MvpError, 'github_api_failed'):
+            self.p.once()
+        monitor = DesktopReader(self.config).overview()['monitor']
+        self.assertEqual(monitor['phase'], 'error')
+        self.assertEqual(monitor['last_error'], 'github_api_failed')
+
+    def test_monitor_optional_bound_and_operational_activity_redacted(self):
+        reader = DesktopReader(self.config)
+        self.assertIsNone(reader.overview()['monitor'])
+        self.p.status.begin()
+        self.p.status.finish()
+        path = self.config.state_dir / 'listener-status.json'
+        data = json.loads(path.read_text())
+        data['owner'] = 'foreign'
+        path.write_text(json.dumps(data))
+        self.assertIsNone(reader.overview()['monitor'])
+        ident = self.s.claim_desktop(self.source, self.target, self.issue, self.parse(), {})
+        self.s.start(ident, {'cli_version': 'TEST', 'argv': [], 'cwd': str(self.root)})
+        self.s.event(ident, 'api_model_request', {'turn': 2, 'max_turns': 40, 'prompt': 'private prompt'})
+        view = reader.overview()
+        self.assertEqual(view['tasks'][0]['activity']['label'], '正在等待模型回复（第 2/40 轮）')
+        self.assertNotIn('private prompt', json.dumps(view))
+        self.s.event(ident, 'api_file_tool', {'name': 'read_file', 'path': 'source.py', 'turn': 2, 'max_turns': 40, 'ok': True, 'content': 'private file'})
+        detail = reader.detail(RID)
+        self.assertIn('source.py', detail['activity']['label'])
+        self.assertNotIn('private file', json.dumps(detail))
 
     def test_scope_failure_keeps_files_and_no_pr(self):
         self.ws.check_changes.side_effect = MvpError('write_scope_violation')

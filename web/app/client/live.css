@@ -455,6 +455,64 @@
   color: #8b96a6;
   text-align: center;
 }
+.live-current {
+  padding: 20px;
+  margin-bottom: 24px;
+  border: 1px solid #dce5ed;
+  border-radius: 12px;
+  background: white;
+  overflow-wrap: anywhere;
+}
+.live-current-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.live-current-head > div {
+  flex: 1;
+  min-width: 0;
+}
+.live-current h2 {
+  margin: 0 0 8px;
+  font-size: 17px;
+}
+.live-current p {
+  margin: 5px 0;
+  font-size: 13px;
+}
+.live-current button {
+  padding: 8px 12px;
+  border: 1px solid #ccdbe4;
+  border-radius: 7px;
+  background: #f1f6fa;
+  color: #243047;
+  cursor: pointer;
+}
+.live-current .live-monitor-time {
+  margin-top: 14px;
+  color: #718096;
+  font-size: 12px;
+}
+.live-unclaimed {
+  margin-top: 18px;
+  border-top: 1px solid #e3e8ef;
+  padding-top: 12px;
+}
+.live-unclaimed h3 {
+  font-size: 14px;
+  margin: 0 0 10px;
+}
+.live-unclaimed article {
+  background: #fff8ec;
+  padding: 12px;
+  margin-bottom: 8px;
+  border-radius: 8px;
+}
+.live-unclaimed a {
+  color: #354b66;
+  font-weight: 650;
+  font-size: 13px;
+}
 .live-failure {
   color: #ad6257;
 }
@@ -480,6 +538,12 @@
   }
 }
 @media (max-width: 700px) {
+  .live-current-head {
+    flex-wrap: wrap;
+  }
+  .live-current-head > div {
+    flex-basis: calc(100% - 40px);
+  }
   .live-top {
     padding: 14px;
   }

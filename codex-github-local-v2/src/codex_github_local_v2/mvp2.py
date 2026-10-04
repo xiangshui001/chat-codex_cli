@@ -12,6 +12,7 @@ import sqlite3
 from urllib.parse import quote
 
 from .model_api import ModelRegistry
+from .listener_status import ListenerStatus
 from .mvp0 import exclusive_lock, positive_id, read_json
 from .mvp0_runner import MvpError, utc_now
 from .mvp1 import AccountGitHub, AccountStore, ManagedWorkspace, ReliableGitHub, run_git
@@ -192,6 +193,7 @@ class DesktopPoller:
         self.workspace_factory = workspace_factory
         self.publisher = publisher or Publisher(self.github, store)
         self.errors = 0
+        self.status = ListenerStatus(config)
 
     def send_receipt(self, row):
         d = self.store.delivery(row["id"])
@@ -323,8 +325,19 @@ class DesktopPoller:
         self.finish_publication(task_id)
 
     def once(self):
+        self.status.begin()
+        try:
+            count = self._once()
+        except MvpError as exc:
+            self.status.finish(self.errors, str(exc))
+            raise
+        self.status.finish(self.errors)
+        return count
+
+    def _once(self):
         self.errors = 0
         repos = self.github.repositories()
+        self.status.update(repository_count=len(repos))
         self.store.bind(self.config, self.github.owner_id)
         active = self.store.unfinished()
         if active:
@@ -332,12 +345,13 @@ class DesktopPoller:
             # Resume only publication, never replay a model execution after a crash.
             if not d or not d["execution_completed"] or d["publication_state"] == "committing":
                 raise MvpError("unfinished_task_requires_manual_inspection")
+            self.status.update(phase='publishing')
             self.finish_publication(active["id"])
             return 0
         for row in self.store.pending_receipts():
             self.send_receipt(row)
         candidates = []
-        for source in repos:
+        for index, source in enumerate(repos):
             client = self.github.client(source)
             try:
                 candidates += [(positive_id(i.get("id")), source, client, i) for i in client.issues()
@@ -345,7 +359,9 @@ class DesktopPoller:
             except MvpError as exc:
                 self.errors += 1
                 LOG.error("repository_poll_failed repository_id=%s code=%s", source.id, exc)
+            self.status.update(checked_repositories=index + 1, error_count=self.errors)
         for _, source, client, issue in sorted(candidates, key=lambda c: c[0]):
+            task = None
             try:
                 comments = client.comments(positive_id(issue.get("number")))
                 task = parse_desktop_task(issue, comments, source, self.config)
@@ -366,8 +382,10 @@ class DesktopPoller:
             except MvpError as exc:
                 if str(exc) != "wrong_host":
                     LOG.warning("task_rejected repository_id=%s issue=%s code=%s", source.id, issue.get("number"), exc)
+                    self.status.reject(source, issue, str(exc), task, self.registry)
                 continue
             if task_id is not None:
+                self.status.update(phase='executing')
                 self.execute(task_id, task, target, known_session)
                 return 1
         return 0

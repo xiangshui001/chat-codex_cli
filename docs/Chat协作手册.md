@@ -9,7 +9,7 @@
 3. Issue 发布在目标仓库，或执行机配置的 hub_repo（例如本人 codex-cli）。授权 JSON 的 repo 始终为实际工作目标。只向本人拥有且两端凭据均可访问的仓库派单。
 4. 创建标题以 `[codex-v2-mvp2]` 开头的开放 Issue，添加唯一、未编辑的 owner 授权评论。第一行 `/codex-v2-mvp2 run`，后接 JSON，顶层仅含 request_id、host_id、repo、base_sha、session、models、task；task 仅含 prompt 和 write_paths。
 5. 新对话 `session: {"mode":"new"}`；旧对话 `session: {"mode":"resume","id":"完整 UUID"}`。不能使用 last 或其它机器的会话。
-6. models.mode 为 gpt / api / gpt-led；primary 必含 provider、model、effort。GPT primary 使用 codex；其它模式用本机登记的其它 provider；GPT 主导还需非空 collaborators，每项也含 provider/model/effort。
+6. models.mode 为 gpt / api / gpt-led；primary 必含 provider、model、effort。GPT primary 使用 codex；其它模式用本机登记的其它 provider；GPT 主导还需非空 collaborators，每项也含 provider/model/effort。API 模型和强度应从执行机 models.json 或已鉴权的 GET /v1/models 读取，精确复制标识，不能把展示名称或其它服务的强度直接当作登记值。
 7. 给用户 Issue 链接。收到机器完成回执后，提供会话 ID、成果 PR 和本地工作目录，核对文件变化与实际任务要求。
 
 接口地址、密钥、环境变量、任意 cwd 或 CLI 参数不能放入派单 JSON。write_paths 只能是明确相对路径或带 / 后缀的目录，拒绝绝对路径、父目录跳转、保留目录与通配符。

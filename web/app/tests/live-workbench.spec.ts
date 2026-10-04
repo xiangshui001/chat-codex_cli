@@ -46,6 +46,103 @@ const detail = {
   },
 };
 
+const monitor = {
+  phase: 'idle',
+  last_poll_started_at: '2026-10-04T10:00:00Z',
+  last_poll_finished_at: '2026-10-04T10:00:10Z',
+  next_poll_at: '2026-10-04T10:01:10Z',
+  repository_count: 3,
+  checked_repositories: 3,
+  error_count: 0,
+  last_error: null,
+  rejections_truncated: false,
+  rejected: [
+    {
+      repo: 'example/test',
+      issue_number: 9,
+      issue_url: 'https://github.com/example/test/issues/9',
+      reason: 'model_not_allowed',
+      model: 'Example-Model',
+      effort: 'max',
+      suggested_model: 'example-model',
+      allowed_efforts: ['none', 'low', 'medium', 'high'],
+    },
+  ],
+};
+
+test('unclaimed issues explain idle status and invalid model choices', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.route('**/api/mvp1/overview', (route) =>
+    route.fulfill({
+      json: {
+        source: 'local-mvp2',
+        observed_at: task.created_at,
+        host_id: 'desktop',
+        owner: 'example',
+        listener: 'running',
+        counts: {},
+        tasks: [],
+        limit: 100,
+        monitor,
+      },
+    }),
+  );
+  await page.goto('/?view=live');
+  const status = page.getByRole('region', { name: '当前运行状态' });
+  await expect(status).toContainText('没有任务在执行，有 Issue 未通过领取检查');
+  await expect(status).toContainText('上次完成 GitHub 检查');
+  await expect(status).toContainText('名称和大小写必须与本机配置一致');
+  await expect(status).toContainText('登记的模型名：example-model');
+  await expect(status).toContainText('登记的思考强度：none、low、medium、high');
+  await expect(status.getByRole('link')).toHaveAttribute('href', monitor.rejected[0].issue_url);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+});
+
+test('current task remains visible while historical detail is selected and updates model round', async ({
+  page,
+}) => {
+  let round = 1;
+  const oldId = '10000000-0000-4000-8000-000000000002';
+  const historical = { ...task, request_id: oldId, issue_number: 7, state: 'failed' };
+  await page.route('**/api/mvp1/**', (route) => {
+    const current = {
+      ...task,
+      model: 'example-model',
+      activity: {
+        kind: 'api_model_request',
+        at: task.started_at,
+        label: `正在等待模型回复（第 ${round}/40 轮）`,
+      },
+    };
+    return route.fulfill({
+      json: route.request().url().endsWith('overview')
+        ? {
+            source: 'local-mvp2',
+            observed_at: task.created_at,
+            host_id: 'desktop',
+            owner: 'example',
+            listener: 'running',
+            counts: { running: 1, failed: 1 },
+            tasks: [current, historical],
+            limit: 100,
+            monitor: { ...monitor, phase: 'executing', rejected: [] },
+          }
+        : { ...detail, ...(route.request().url().endsWith(oldId) ? historical : current) },
+    });
+  });
+  await page.goto('/?view=live#task/' + oldId);
+  await expect(page.getByRole('heading', { name: 'Issue #7' })).toBeVisible();
+  const status = page.getByRole('region', { name: '当前运行状态' });
+  await expect(status).toContainText('Issue #8');
+  await expect(status).toContainText('正在等待模型回复（第 1/40 轮）');
+  round = 2;
+  await expect(status).toContainText('正在等待模型回复（第 2/40 轮）', { timeout: 10000 });
+  await status.getByRole('button', { name: '查看当前任务' }).click();
+  await expect(page.getByRole('heading', { name: 'Issue #8' })).toBeVisible();
+});
+
 test('MVP-2 shows conversation, chosen model, hub receipt and target PR', async ({ page }) => {
   const session = '20000000-0000-4000-8000-000000000002';
   const current = {
