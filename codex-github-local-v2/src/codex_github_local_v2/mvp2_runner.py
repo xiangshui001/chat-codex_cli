@@ -9,6 +9,7 @@ import time
 import uuid
 
 from .model_api import ModelClient, tool_result
+from .api_recovery import ResponseRecovery
 from .mvp0 import fields, read_json, text, write_path
 from .mvp0_runner import CodexRunner, Execution, MvpError, utc_now
 from .mvp2_contract import canonical_id
@@ -189,6 +190,7 @@ class ApiFileRunner:
         event("turn.started")
         turns_used = 0
         max_turns = self.registry.limits["max_turns"]
+        recovery = ResponseRecovery(self.registry, record)
         try:
             while max_turns is None or turns_used < max_turns:
                 remaining = max_turns - turns_used if max_turns is not None else None
@@ -199,8 +201,10 @@ class ApiFileRunner:
                         "Prioritize delivery over further exploration; disclose incomplete coverage rather than invent findings."})
                 turns_used += 1
                 record('api_model_request', {'turn': turns_used, 'max_turns': max_turns})
-                result = self.client.call(chosen, history, FILE_TOOLS, timeout=deadline-time.monotonic())
+                result = recovery.call(self.client, chosen, history, FILE_TOOLS, deadline)
                 record('api_model_response', {'turn': turns_used, 'max_turns': max_turns})
+                if recovery.continue_response(result, history, deadline):
+                    continue
                 history.extend(result["history"])
                 if len(json.dumps(history, ensure_ascii=False).encode()) > 1024 * 1024:
                     raise MvpError("api_context_limit")
