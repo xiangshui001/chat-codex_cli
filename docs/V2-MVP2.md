@@ -159,3 +159,5 @@ HTTP 模式使用 provider ID；GPT 模式 primary 选本机登记的 `kind: gpt
 监听器原子更新本机私有 listener-status.json（version 1），记录检查阶段、仓库数量、检查完成时间、下次检查时间及最多 50 项未领取原因。它是可选的状态投影，不修改任务数据库结构、冻结授权或历史任务，也不产生自动重放。旧安装缺少记录时明确显示尚无检查详情；身份不匹配或无效记录不展示。页面每 3 秒读取本机状态，区分页面刷新与 GitHub 检查。API 任务的当前轮数、等待模型回复和文件操作来自真实运行事件，不输出模型内部推理或文件正文。
 
 官方接口依据：[Codex CLI 会话与参数](https://learn.chatgpt.com/docs/developer-commands?surface=cli)、[MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Responses function calling](https://developers.openai.com/api/docs/guides/function-calling)。实际型号/effort 是否可用由账号和 provider 决定，未在代码中假定所有型号支持所有强度。
+
+MVP-2 的 `timeout_seconds` 可设为 1–10800 秒，当前安装示例为 10800 秒（3 小时）。这是单个任务的总执行时限，与模型单次 API 请求超时分开。已有执行使用启动时的时限；修改本机配置后须在任务结束、监听器空闲时重启监听服务，新任务才使用新值。
