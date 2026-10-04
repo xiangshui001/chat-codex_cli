@@ -419,6 +419,9 @@
 .live-output-item.agent_message {
   color: #b2d7cf;
 }
+.live-output-item small.live-command-failed {
+  color: #f2ad98;
+}
 .live-output .live-empty {
   color: #8e9daf;
 }

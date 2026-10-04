@@ -51,14 +51,14 @@ export function LoginPage({
             保留每一次人工决定。
           </p>
           <div className="login-action">
+            <Button variant="primary" onClick={onEnter}>
+              {localHarness ? '进入本地验证工作区' : '进入演示工作区'} <ArrowRight size={17} />
+            </Button>
             {!localHarness && (
               <p>
                 <a href="?view=live">查看本机真实任务与执行过程 →</a>
               </p>
             )}
-            <Button variant="primary" onClick={onEnter}>
-              {localHarness ? '进入本地验证工作区' : '进入演示工作区'} <ArrowRight size={17} />
-            </Button>
             <p>
               {localHarness
                 ? '使用本地 HTTP 与核心状态，不调用真实模型。'

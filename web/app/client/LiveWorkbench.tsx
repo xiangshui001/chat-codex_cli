@@ -379,7 +379,13 @@ export function LiveWorkbench() {
                       <article key={item.id} className={'live-output-item ' + item.kind}>
                         <header>
                           <strong>{item.title}</strong>
-                          <small>
+                          <small
+                            className={
+                              item.exit_code != null && item.exit_code !== 0
+                                ? 'live-command-failed'
+                                : undefined
+                            }
+                          >
                             {item.exit_code != null
                               ? `exit ${item.exit_code}`
                               : item.status === 'in_progress'

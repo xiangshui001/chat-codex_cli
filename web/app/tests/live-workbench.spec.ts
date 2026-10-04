@@ -38,6 +38,7 @@ const detail = {
         status: 'in_progress',
         title: 'create document',
         text: '',
+        exit_code: 1,
       },
     ],
     truncated: false,
@@ -77,6 +78,7 @@ test('real-mode page refreshes execution and receipt without control writes', as
   await page.goto('/?view=live');
   await expect(page.getByRole('heading', { name: 'Issue #8' })).toBeVisible();
   await expect(page.getByText('create document')).toBeVisible();
+  await expect(page.locator('.live-command-failed')).toHaveText('exit 1');
   complete = true;
   await expect(page.getByText('Task completed')).toBeVisible({ timeout: 10000 });
   await expect(page.getByRole('link', { name: '查看 GitHub 回执' })).toHaveAttribute(
