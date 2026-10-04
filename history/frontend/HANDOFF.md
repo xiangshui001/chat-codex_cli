@@ -1,7 +1,9 @@
+> 历史快照，当前状态见[最新主页](../../README.md)。
+
 # React 前端交接
 
 本文记录 PR #5 的历史交付与验证。当前 integration 边界见
-[INTEGRATION.md](../../docs/INTEGRATION.md)；2026-10-02 本机没有 Node/npm，目录
+[INTEGRATION.md](../INTEGRATION-20261002.md)；2026-10-02 本机没有 Node/npm，目录
 整理后的前端检查待 Node 环境验证，以下结果不代表本轮重跑。
 
 ## 任务与基线

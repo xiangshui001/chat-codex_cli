@@ -12,7 +12,7 @@ Chat 的 GitHub 连接与 Ubuntu gh 是两套授权。若其中一端只获准�
 
 ## 安装与配置
 
-V2 0.0.5，执行目标为 Linux / WSL，独立虚拟环境安装：
+V2 0.0.6，执行目标为 Linux / WSL，独立虚拟环境安装：
 
 ```bash
 python3 -m venv /ABS/PATH/mvp1-venv

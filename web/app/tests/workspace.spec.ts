@@ -14,7 +14,7 @@ test.beforeEach(async ({ page }) => {
     const url = request.url();
     if (/^https?:/.test(url) && new URL(url).origin !== 'http://127.0.0.1:4173') external.push(url);
   });
-  await page.goto('/#/dashboard');
+  await page.goto('/?view=demo#/dashboard');
   await expect(page.getByRole('heading', { name: '工作区概览', exact: true })).toBeVisible();
 });
 test.afterEach(() => {
@@ -216,10 +216,10 @@ test('read failure displays stale data, disables writes and supports retry', asy
 });
 
 test('unknown task and malformed route show explicit errors', async ({ page }) => {
-  await page.goto('/#/tasks/GH-999');
+  await page.goto('/?view=demo#/tasks/GH-999');
   await expect(page.getByRole('heading', { name: '任务读取失败' })).toBeVisible();
   await expect(page.locator('main')).toContainText('GH-999');
-  await page.goto('/#/evidence/GH-42/not-allowed.json');
+  await page.goto('/?view=demo#/evidence/GH-42/not-allowed.json');
   await expect(page.getByRole('heading', { name: '页面不存在' })).toBeVisible();
 });
 

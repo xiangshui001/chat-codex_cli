@@ -75,7 +75,7 @@ test('real-mode page refreshes execution and receipt without control writes', as
       : { ...detail, ...current, files: complete ? ['docs/check.txt'] : [] };
     await route.fulfill({ json: value });
   });
-  await page.goto('/?view=live');
+  await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Issue #8' })).toBeVisible();
   await expect(page.getByText('create document')).toBeVisible();
   await expect(page.locator('.live-command-failed')).toHaveText('exit 1');

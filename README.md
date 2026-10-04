@@ -1,58 +1,34 @@
 # chat-codex_cli
 
-网页 Chat 规划与发布 GitHub 任务，本机 Ubuntu / WSL 中的 Codex CLI 执行。也可直接进入原生 CLI 对话、选择模型和思考强度。执行分支上传为 PR，是否合并由用户决定。
+Chat 通过 GitHub Issue 发布授权任务，本机 Ubuntu / WSL 的 Codex CLI 执行，结果回写 Issue；本机工作台展示执行过程。当前可用入口为 **MVP-1 + 只读真实工作台（V2 0.0.6）**。
 
-## 两份主要手册
+## 从这里开始
 
-- **[用户使用手册](docs/用户使用手册.md)**：日常命令、新仓库登记、模型设置、自动与交互混合使用、PR 处理。第 9 节为原生 CLI 使用。
-- **[给网页 Chat 的协作手册](docs/Chat协作手册.md)**：上传或提供给新 Chat，另附目标仓库和本地配置摘要。第 0 节先区分自动与交互任务。
+- [用户使用手册](docs/用户使用手册.md)：安装、启动、打开工作台与查看成果。
+- [Chat 协作手册](docs/Chat协作手册.md)：给 Chat 的派单协议与操作边界。
+- [MVP-1 配置与协议](docs/V2-MVP1.md)：账号仓库发现、独立任务目录和串行去重。
+- [工作台说明](docs/MVP1-WORKBENCH.md)：真实时间线、命令输出、文件变化、退出码与回执。
 
-## 获取与验证
+工作台服务启动后打开 **http://127.0.0.1:8791/**。开发服务器 5173 也默认进入真实工作台，需要同时运行 8791 的后端。历史演示必须显式访问 `?view=demo`，不会在真实连接失败时自动出现。
 
-在 Ubuntu 中，安装并登录 Git、GitHub CLI 和 Codex CLI 后，获取这份工具库：
+## 当前能力与限制
 
-```bash
-mkdir -p "$HOME/codex-tools"
-```
+单用户、单 Host，发现凭据可见的本人仓库；新仓库有初始提交后可派单，不需逐个登记。授权通过后按需克隆，每次只执行一个任务，调用当前已登录的 `codex exec --json`，SQLite 防重复执行。Chat 和执行端 GitHub 权限分别配置。
 
-```bash
-gh repo clone xiangshui001/chat-codex_cli "$HOME/codex-tools/chat-codex_cli"
-```
+成果留在本机任务目录，Issue 记录执行状态；**不会自动提交、推送、创建 PR 或合并**。工作台只读，不提供远程控制、模型设置、取消和重跑。没有开机自启、完整断电恢复或容器隔离。异常未完成任务需人工核对，不自动重放。
 
-```bash
-python3 "$HOME/codex-tools/chat-codex_cli/codex-github-local/verify.py"
-```
+## 代码与文档
 
-测试不调用真实模型或 GitHub 写入。Ubuntu 应执行 53 项，无跳过。已有目录请确认内容后继续使用，不覆盖已有工作。
-
-接入业务仓库按用户手册第 5 节，用自己的配置文件登记。**工具库和业务仓库是两个角色；下载本工具不会自动把本仓库或任何业务仓库加入任务队列。**
-
-## 三种用法
-
-| 入口 | 执行方式 |
+| 目录 / 文档 | 用途 |
 |---|---|
-| Chat 自动派单 | `[codex] ` Issue + 唯一未编辑执行评论，watch 自动执行、检查和上传 PR |
-| Chat 整理、CLI 交互 | `[manual] ` Issue，无自动执行评论；用户让原生 CLI 读取任务并执行 |
-| 直接 CLI | 在独立交互克隆中直接输入任务 |
+| `codex-github-local-v2/` | 当前 MVP-0 / MVP-1 执行端、只读工作台服务；另保留开发原型入口 |
+| `web/app/` | 唯一活跃前端，默认真实数据，显式演示与测试模式 |
+| `codex-github-local/` | 保留的 V1 0.1.0，独立协议与生命周期；[V1 手册](docs/v1/用户使用手册.md) |
+| [模块边界](docs/INTEGRATION.md) | 当前执行链路与开发原型的区别 |
+| [验证范围](docs/VALIDATION.md) | 测试与真实验证记录入口 |
+| [完整 V2 设计](docs/V2设计方案.md) | 未来目标，尚未全部实现 |
+| [历史资料](history/README.md) | 旧交接、旧验证与发布快照，不作当前部署说明 |
 
-当前不能把正在运行的自动 exec 会话直接变成可插话的 CLI。不同入口不重复执行同一任务。自动 PR 使用 Create a merge commit 后，程序还需核对同步才能记录 accepted；手动 PR 不自动产生此记录。
+详细真机记录按约定保存在 [codex-cli](https://github.com/xiangshui001/codex-cli/blob/workbench-records-20261004/docs/WORKBENCH_SMOKE_2026-10-04.md)，可能需要相应仓库权限。**本电脑验证不代表台式机 WSL 已验证。** [环境排查](docs/环境排查.md)中的旧环境经验需按实际机器核对。
 
-## 管理与证据
-
-- [本机真实任务工作台](docs/MVP1-WORKBENCH.md)：查看 MVP-1 的任务时间线、Codex 执行输出、文件变化与 Issue 回执；默认本机地址 `http://127.0.0.1:8791/`。
-
-- [MVP-1 账号内仓库自动接入](docs/V2-MVP1.md)：发现本人仓库、授权后创建独立工作区、跨仓库串行去重；[本电脑真实验证记录（codex-cli）](https://github.com/xiangshui001/codex-cli/blob/mvp1-records-20261004/docs/MVP1_SMOKE_2026-10-04.md)。
-- [V2 远程指挥与本机工作台设计](docs/V2设计方案.md)：单人、WSL 单主机、多仓库的正式实施设计；含协议、故障恢复与分阶段验收，尚未全部实现。
-- [MVP-0 本电脑 Ubuntu 真实验证记录](https://github.com/xiangshui001/codex-cli/blob/mvp0-smoke-20261004/docs/MVP0_SMOKE_2026-10-04.md)：Issue → Codex CLI → 回执及重复轮询已验证；记录保存在 codex-cli，台式机 WSL 尚未验证。
-- [integration 模块边界与吸收决策](docs/INTEGRATION.md)：0.1.0、v2、Harness 契约、React 和视觉组件的维护入口。
-- [本地 Harness 与迁移验证](docs/HARNESS_VALIDATION.md)：真实 HTTP/core 的隔离 smoke、前端环境与显式 ledger 迁移。
-- `codex-github-local-v2/` 是独立旁路原型；`web/app/` 是唯一活跃前端，提供显式 Mock 演示及本地 HTTP 验证入口。二者都尚未替换现役 0.1.0。
-- [验证范围](docs/VALIDATION.md)：明确离线测试、真实演示、GitHub PR 和未验证步骤。
-- [环境排查](docs/环境排查.md)：WSL 代理、沙箱审批、PATH 与依赖。
-- [修复历史](history/README.md)：可靠性修复、退出码补丁、桥接和交互文档。
-- `codex-github-local/`：程序、通用 profile、schema、完整测试夹具。
-- `validation/historical/`：历史脱敏验证摘要；`PUBLICATION.json`：此次归档文件校验和。
-
-本仓库公开。仅收录通用源码、操作说明和脱敏证据，不收录认证文件、真实业务数据、运行 worktree、原始模型日志、个人路径或现用配置。许可证尚未另行指定；本次上传没有代用户选择开源许可证。
-
-现版保持串行、人工合并，不提供自动部署、开机自启或跨电脑抢占。
+本仓库公开，不提交凭据、真实配置、任务数据库、工作区或原始模型日志。第三方素材归属见 [前端 NOTICE](web/app/NOTICE.md)；未另行选择项目整体许可证。

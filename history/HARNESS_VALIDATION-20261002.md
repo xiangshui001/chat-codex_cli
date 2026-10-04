@@ -1,3 +1,5 @@
+> 历史快照，当前状态见[最新主页](../README.md)。
+
 # 本地 HTTP / core 验证与 ledger 迁移
 
 第二阶段在 integration 增加一个 **local-smoke** Harness。HTTP、React transport、

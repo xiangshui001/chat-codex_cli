@@ -110,7 +110,7 @@ test('desktop outside model renders without a toolbar, motion or focus trap', as
   page.on('console', (message) => {
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
-  await page.goto('/');
+  await page.goto('/?view=demo');
   await expect(page.getByRole('button', { name: '进入演示工作区' })).toBeEnabled();
   await ready(page);
   await still(page);
@@ -143,7 +143,7 @@ test('desktop outside model renders without a toolbar, motion or focus trap', as
 
 test('repeated page entry and breakpoint changes dispose every scene', async ({ page }) => {
   await instrument(page);
-  await page.goto('/#/login');
+  await page.goto('/?view=demo#/login');
   await ready(page);
   const firstCount = await page.evaluate(() => window.libraryProbe.contexts.length);
   await page.setViewportSize({ width: 390, height: 844 });
@@ -193,7 +193,7 @@ test('leaving during lazy import cannot mount a late scene', async ({ page }) =>
     await delayed;
     await route.continue();
   });
-  await page.goto('/');
+  await page.goto('/?view=demo');
   await started;
   await expect(page.getByTestId('library-model')).toHaveAttribute('data-status', 'loading');
   await page.getByRole('button', { name: '进入演示工作区' }).click();
@@ -216,7 +216,7 @@ test('failed WebGL keeps the entry button and keyboard usable', async ({ page })
       return Reflect.apply(getContext, this, args);
     } as typeof getContext;
   });
-  await page.goto('/');
+  await page.goto('/?view=demo');
   await expect(page.getByTestId('library-model')).toHaveAttribute('data-status', 'fallback');
   await expect(page.getByText('模型暂不可用，你仍可进入工作区')).toBeVisible();
   await expect(page.locator('canvas')).toHaveCount(0);
@@ -230,7 +230,7 @@ test('failed WebGL keeps the entry button and keyboard usable', async ({ page })
 
 test('failed module load falls back without blocking entry', async ({ page }) => {
   await page.route('**/tisu/astral-library/library.js', (route) => route.abort());
-  await page.goto('/');
+  await page.goto('/?view=demo');
   await expect(page.getByTestId('library-model')).toHaveAttribute('data-status', 'fallback');
   await page.getByRole('button', { name: '进入演示工作区' }).click();
   await expect(page.getByRole('heading', { name: '工作区概览', exact: true })).toBeVisible();
@@ -238,7 +238,7 @@ test('failed module load falls back without blocking entry', async ({ page }) =>
 
 test('unexpected context loss releases the scene and shows fallback', async ({ page }) => {
   await instrument(page);
-  await page.goto('/');
+  await page.goto('/?view=demo');
   await ready(page);
   await page.evaluate(() => {
     window.libraryProbe.contexts.at(-1)!.getExtension('WEBGL_lose_context')!.loseContext();
@@ -255,7 +255,7 @@ test('mobile keeps entry first, allows scrolling, and respects reduced motion', 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await instrument(page);
-  await page.goto('/');
+  await page.goto('/?view=demo');
   await ready(page);
   await still(page);
   await expect(page.getByRole('button', { name: '进入演示工作区' })).toBeInViewport();
