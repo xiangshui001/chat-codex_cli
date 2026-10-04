@@ -4,6 +4,7 @@ import { createMockClient } from '../api-client/mock';
 import { HttpClient } from '../api-client/http';
 import { AppShell } from './AppShell';
 import { LoginPage } from './LoginPage';
+import { LiveWorkbench } from './LiveWorkbench';
 
 // Explicit transport selection. A live failure never switches to mock.
 const localHarness = new URLSearchParams(window.location.search).get('harness') === 'local-smoke';
@@ -35,6 +36,10 @@ function PreviewEntry() {
 }
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <PreviewEntry />
+    {new URLSearchParams(window.location.search).get('view') === 'live' ? (
+      <LiveWorkbench />
+    ) : (
+      <PreviewEntry />
+    )}
   </StrictMode>,
 );

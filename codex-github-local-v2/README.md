@@ -1,5 +1,7 @@
 # codex-github-local-v2 prototype
 
+本机真实任务查看入口：`codex-github-local-v2-workbench`。连接 MVP-1 的实际状态与 Codex 输出，见 [真实工作台说明](../docs/MVP1-WORKBENCH.md)。
+
 MVP-1 增加账号内仓库自动发现和授权后按需克隆，所有仓库串行执行。独立入口 `codex-github-local-v2-mvp1`，见 [V2-MVP1](../docs/V2-MVP1.md) 与 [验证记录](../docs/MVP1_RESULT.md)。
 
 MVP-0 提供独立入口 `codex-github-local-v2-mvp0`：单仓库 Issue → SQLite 去重 → 本机 Codex CLI → Issue 回执。用法和限制见 [V2-MVP](../docs/V2-MVP.md)，本轮环境与验证记录见 [MVP0_RESULT](../docs/MVP0_RESULT.md)。它不使用完整 V2 控制器或前端。
@@ -22,7 +24,7 @@ MVP-0 提供独立入口 `codex-github-local-v2-mvp0`：单仓库 Issue → SQLi
 
 仅依赖 Python 3.11+ 标准库。
 
-当前包版本为 **0.0.5**，包含独立的 MVP-0 / MVP-1 入口。运行时没有第三方 Python 依赖；构建需要
+当前包版本为 **0.0.6**，包含独立的 MVP-0 / MVP-1 和只读工作台入口。运行时没有第三方 Python 依赖；构建需要
 setuptools。安装到独立虚拟环境，不覆盖 0.1.0 的 launcher/profile/runtime：
 
 ```bash

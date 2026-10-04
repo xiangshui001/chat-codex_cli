@@ -39,6 +39,8 @@ python3 "$HOME/codex-tools/chat-codex_cli/codex-github-local/verify.py"
 
 ## 管理与证据
 
+- [本机真实任务工作台](docs/MVP1-WORKBENCH.md)：查看 MVP-1 的任务时间线、Codex 执行输出、文件变化与 Issue 回执；默认本机地址 `http://127.0.0.1:8791/`。
+
 - [MVP-1 账号内仓库自动接入](docs/V2-MVP1.md)：发现本人仓库、授权后创建独立工作区、跨仓库串行去重；[本电脑真实验证记录（codex-cli）](https://github.com/xiangshui001/codex-cli/blob/mvp1-records-20261004/docs/MVP1_SMOKE_2026-10-04.md)。
 - [V2 远程指挥与本机工作台设计](docs/V2设计方案.md)：单人、WSL 单主机、多仓库的正式实施设计；含协议、故障恢复与分阶段验收，尚未全部实现。
 - [MVP-0 本电脑 Ubuntu 真实验证记录](https://github.com/xiangshui001/codex-cli/blob/mvp0-smoke-20261004/docs/MVP0_SMOKE_2026-10-04.md)：Issue → Codex CLI → 回执及重复轮询已验证；记录保存在 codex-cli，台式机 WSL 尚未验证。

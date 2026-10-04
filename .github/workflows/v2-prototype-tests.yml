@@ -3,17 +3,21 @@ name: v2 prototype tests
 on:
   push:
     branches:
+      - main
+      - feature/v2-live-workbench
       - prototype/orchestrator-v2
       - integration/**
       - feature/v2-mvp0-issue-to-codex
       - feature/v2-mvp1-account-repositories
     paths:
       - 'codex-github-local-v2/**'
+      - 'web/app/**'
       - 'docs/V2架构草案.md'
       - '.github/workflows/v2-prototype-tests.yml'
   pull_request:
     paths:
       - 'codex-github-local-v2/**'
+      - 'web/app/**'
       - 'docs/V2架构草案.md'
       - '.github/workflows/v2-prototype-tests.yml'
 
@@ -50,3 +54,4 @@ jobs:
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-control" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp0" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp1" --help
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-workbench" --help

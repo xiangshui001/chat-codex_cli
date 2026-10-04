@@ -1,5 +1,7 @@
 # chat-codex v2 React 前端
 
+**真实 MVP-1 工作台已经接入**：打开本机只读服务 `http://127.0.0.1:8791/`，或开发页 `http://127.0.0.1:5173/?view=live`，查看真实任务、Codex 执行过程、文件变化和回执。启动方式见 [MVP1-WORKBENCH](../../docs/MVP1-WORKBENCH.md)。下文默认入口与旧控制页面仍为演示 / local-smoke，不具有真实执行控制能力。
+
 React + TypeScript + Vite 管理界面，参考 [Draft PR #4](https://github.com/xiangshui001/chat-codex_cli/pull/4)
 的视觉和交互规格。默认接内存 MockClient；第二阶段新增显式 local-smoke HttpClient
 与本机 HTTP/core 验证入口。生产 API、真实 Codex Host 和登录尚未接入。

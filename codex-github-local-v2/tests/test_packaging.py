@@ -15,7 +15,8 @@ class PackagingTests(unittest.TestCase):
         self.assertEqual(metadata["project"]["version"], __version__)
         scripts = metadata["project"]["scripts"]
         self.assertEqual(set(scripts), {"codex-github-local-v2", "codex-github-local-v2-control",
-                                       "codex-github-local-v2-mvp0", "codex-github-local-v2-mvp1"})
+                                       "codex-github-local-v2-mvp0", "codex-github-local-v2-mvp1",
+                                       "codex-github-local-v2-workbench"})
         for target in scripts.values():
             module, function = target.split(":")
             self.assertTrue(callable(getattr(importlib.import_module(module), function)))
