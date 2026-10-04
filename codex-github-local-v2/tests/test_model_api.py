@@ -205,7 +205,41 @@ class ModelApiTests(ApiFixture):
         self.queue = [chat(None, [function('write_file', {'path': '../escape', 'content': 'bad'})]), chat('Cannot write')]
         ApiFileRunner(self.registry).run_task(task, workspace, self.root/'run', 10, lambda *_: None)
         self.assertFalse((self.root/'escape').exists())
-        self.assertIn('error', self.requests[-1][1]['messages'][-1]['content'])
+        tool_messages = [m for m in self.requests[-1][1]['messages'] if m['role'] == 'tool']
+        self.assertIn('error', tool_messages[-1]['content'])
+
+    def test_review_can_read_beyond_old_budget_then_write_report(self):
+        self.file.write_text(json.dumps({'providers': self.providers}))
+        registry = ModelRegistry(self.file)
+        workspace = self.root / 'project'; workspace.mkdir()
+        (workspace / 'source.txt').write_text('review evidence')
+        task = DesktopTask('6c9134d1-f6ae-49f3-bdfd-e3681c19e183', 'desktop', 'owner/project', 'a'*40,
+                           'Review repository', ('docs/report.md',), 1, 'hash', {'mode': 'new'},
+                           {'mode': 'api', 'primary': self.other})
+        self.queue = [chat(None, [function('read_file', {'path': 'source.txt'}, str(i))]) for i in range(13)]
+        self.queue += [chat(None, [function('write_file', {'path': 'docs/report.md', 'content': 'Evidence-based report'})]), chat('Done')]
+        result, _, _ = ApiFileRunner(registry).run_task(task, workspace, self.root/'run', 10, lambda *_: None)
+        self.assertIsNone(result.error)
+        self.assertEqual((workspace/'docs/report.md').read_text(), 'Evidence-based report')
+
+    def test_budget_reminder_and_failure_diagnostics_without_resume(self):
+        workspace = self.root / 'project'; workspace.mkdir()
+        task = DesktopTask('6c9134d1-f6ae-49f3-bdfd-e3681c19e183', 'desktop', 'owner/project', 'a'*40,
+                           'Review repository', ('docs/report.md',), 1, 'hash', {'mode': 'new'},
+                           {'mode': 'api', 'primary': self.other})
+        self.queue = [chat(None, [function('read_file', {'path': 'missing.txt'}, str(i))]) for i in range(4)]
+        recorded = []
+        result, _, history = ApiFileRunner(self.registry).run_task(
+            task, workspace, self.root/'run', 10, lambda kind, value: recorded.append(value))
+        self.assertEqual(result.error, 'model_turn_limit')
+        self.assertIsNone(history)
+        self.assertFalse(any(item['ok'] for item in recorded))
+        self.assertEqual(recorded[-1]['turn'], 4)
+        saved = json.loads((self.root/'run/context.json').read_text())
+        self.assertTrue(any('Only 1 model responses remain' in (m.get('content') or '') for m in saved))
+        metadata = json.loads((self.root/'run/execution.json').read_text())
+        self.assertEqual((metadata['turns_used'], metadata['max_turns']), (4, 4))
+        self.assertFalse((workspace/'docs/report.md').exists())
 
 
 if __name__ == '__main__':

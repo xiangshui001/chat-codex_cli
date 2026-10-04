@@ -88,6 +88,12 @@ GPT CLI 使用既有登录，不需要 OpenAI API key。HTTP 的 GPT 模式需�
 
 ## 本机 HTTP API
 
+### API 仓库任务的轮数
+
+models.json 的 max_turns 默认 40，允许 1–50；它计数模型回复，不是读取文件次数，也不由思考强度决定。最后三轮会提示模型先写交付文件、再结束回复。整仓审查应在报告中明确实际覆盖范围，未检查的部分不能声称已审查。仍受总执行时限和上下文大小限制，增加轮数可能增加调用费用。
+
+已有配置中的显式 max_turns 不会被升级覆盖，需本机调整后重启监听器和模型 API；已领取任务的冻结配置保持原样。耗尽轮数仍报告 model_turn_limit，不将未完成任务当作成功。失败任务保留受大小限制的私有 context.json 和轮数诊断，不登记为可恢复会话、不自动重跑。核对后可用新的 request_id 和当前 main 基线发布新任务。
+
 ```bash
 export CODEX_COLLABORATION_TOKEN='<至少 32 个 ASCII 字符的随机本机令牌>'
 # 同时在当前进程环境设置各 provider 所需的 API key

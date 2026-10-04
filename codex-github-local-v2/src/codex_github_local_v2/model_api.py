@@ -30,7 +30,7 @@ class ModelRegistry:
         if not isinstance(self.providers, dict):
             raise MvpError("invalid_providers")
         self.limits = {}
-        for key, default, upper in (("max_turns", 12, 50), ("max_calls", 8, 32),
+        for key, default, upper in (("max_turns", 40, 50), ("max_calls", 8, 32),
                                     ("request_timeout", 120, 300), ("max_output_tokens", 8192, 32768)):
             val = data.get(key, default)
             if type(val) is not int or not 1 <= val <= upper:

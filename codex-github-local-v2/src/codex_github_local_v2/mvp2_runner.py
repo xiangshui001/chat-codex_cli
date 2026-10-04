@@ -174,6 +174,9 @@ class ApiFileRunner:
         session_id = session_id or str(uuid.uuid4())
         history = list(history or [])
         history += [{"role": "system", "content": "Complete the user's task using repository file tools. Do not claim tests ran. "
+            "The controller handles Git commits, PRs and Issue receipts after successful execution. "
+            "Group independent tool calls in one response. Write requested artifacts before your final answer. "
+            "If review coverage is incomplete, disclose exactly what was not reviewed in the report. "
             "This is the current workspace and current write authorization; previous turns do not grant extra paths. Allowed paths: "
             + json.dumps(task.write_paths)}, {"role": "user", "content": task.prompt}]
         files = FileTools(workspace, task.write_paths)
@@ -184,8 +187,17 @@ class ApiFileRunner:
                 stream.write(json.dumps({"type": kind, **values}, ensure_ascii=False) + "\n")
         event("thread.started", thread_id=session_id)
         event("turn.started")
+        turns_used = 0
+        max_turns = self.registry.limits["max_turns"]
         try:
-            for turn in range(self.registry.limits["max_turns"]):
+            for turn in range(max_turns):
+                remaining = max_turns - turn
+                if remaining <= 3:
+                    history.append({"role": "system", "content":
+                        f"Only {remaining} model responses remain, including this one. "
+                        "Finish required artifact writes now, then give your final answer without tool calls. "
+                        "Prioritize delivery over further exploration; disclose incomplete coverage rather than invent findings."})
+                turns_used = turn + 1
                 result = self.client.call(chosen, history, FILE_TOOLS, timeout=deadline-time.monotonic())
                 history.extend(result["history"])
                 if len(json.dumps(history, ensure_ascii=False).encode()) > 1024 * 1024:
@@ -195,7 +207,6 @@ class ApiFileRunner:
                         raise MvpError("empty_model_response")
                     event("item.completed", item={"id": "final", "type": "agent_message", "text": result["text"]})
                     event("turn.completed")
-                    (evidence / "context.json").write_text(json.dumps(history, ensure_ascii=False), encoding="utf-8")
                     return Execution(0, None), session_id, history
                 if len(result["calls"]) > 16:
                     raise MvpError("file_tool_call_limit")
@@ -204,9 +215,11 @@ class ApiFileRunner:
                         raise MvpError("execution_timeout")
                     try:
                         value = files.call(call["name"], read_json(call["arguments"]))
-                        record("api_file_tool", {"name": call["name"]})
                     except (MvpError, OSError, UnicodeError) as exc:
                         value = {"error": str(exc) if isinstance(exc, MvpError) else "file_tool_failed"}
+                    record("api_file_tool", {"name": call["name"], "turn": turns_used,
+                                             "max_turns": max_turns, "ok": "error" not in value,
+                                             **({"error": value["error"]} if "error" in value else {})})
                     history.append(tool_result(result["wire_api"], call["id"], value))
                     if call["name"] in {"write_file", "delete_file"} and "error" not in value:
                         event("item.completed", item={"id": call["id"], "type": "file_change", "changes": [{"path": value["path"]}]})
@@ -215,5 +228,10 @@ class ApiFileRunner:
             event("turn.failed", message=str(exc))
             return Execution(1, str(exc)), session_id, None
         finally:
+            # Private diagnostic history; failed sessions remain ineligible for automatic resume.
+            context = json.dumps(history, ensure_ascii=False)
+            if len(context.encode()) <= 1024 * 1024:
+                (evidence / "context.json").write_text(context, encoding="utf-8")
             (evidence / "execution.json").write_text(json.dumps({"backend": "api", "model": chosen["model"],
-                "effort": chosen["effort"], "session_id": session_id, "finished_at": utc_now()}), encoding="utf-8")
+                "effort": chosen["effort"], "session_id": session_id, "finished_at": utc_now(),
+                "turns_used": turns_used, "max_turns": max_turns}), encoding="utf-8")
