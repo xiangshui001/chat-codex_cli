@@ -69,6 +69,7 @@ type Overview = {
   tasks: Task[];
   limit: number;
   monitor?: Monitor | null;
+  max_parallel_tasks?: number;
 };
 type Detail = Task & {
   cwd: string | null;
@@ -131,6 +132,7 @@ const reasons: Record<string, string> = {
   target_repository_not_visible: '本机无法访问目标仓库',
   api_session_not_found: '本机找不到要续接的 API 对话',
   cli_session_not_found_on_this_host: '本机找不到要续接的 Codex 对话',
+  session_busy: '同一对话正在执行，结束后会自动重新检查此 Issue',
 };
 const elapsed = (value: string | null | undefined, now: number) => {
   const seconds = value ? Math.max(0, Math.floor((now - Date.parse(value)) / 1000)) : 0;
@@ -219,9 +221,9 @@ export function LiveWorkbench() {
     window.history.replaceState(null, '', '#task/' + id);
   }
   const counts = overview?.counts ?? {};
-  const active = overview?.tasks.find(
-    (task) => task.state === 'running' || task.state === 'queued',
-  );
+  const activeTasks =
+    overview?.tasks.filter((task) => task.state === 'running' || task.state === 'queued') ?? [];
+  const active = activeTasks[0];
   const monitor = overview?.monitor;
   const rejected = monitor?.rejected ?? [];
   const phaseLabel = !overview
@@ -322,7 +324,15 @@ export function LiveWorkbench() {
           <div className="live-current-head">
             <Activity size={20} />
             <div>
-              <h2>{phaseLabel}</h2>
+              <h2>
+                {activeTasks.length > 1 ? `同时处理 ${activeTasks.length} 个任务` : phaseLabel}
+              </h2>
+              {overview?.max_parallel_tasks && (
+                <p>
+                  并发任务：{activeTasks.length} / {overview.max_parallel_tasks} ·
+                  每个任务使用独立工作目录
+                </p>
+              )}
               {active && (
                 <p>
                   Issue #{active.issue_number} · {active.repo} · {active.model ?? '模型准备中'}
@@ -339,6 +349,27 @@ export function LiveWorkbench() {
             </div>
             {active && <button onClick={() => select(active.request_id)}>查看当前任务</button>}
           </div>
+          {activeTasks.slice(1).map((task) => (
+            <div className="live-current-head" key={task.request_id}>
+              <Activity size={20} />
+              <div>
+                <p>
+                  Issue #{task.issue_number} · {task.repo} · {task.model ?? '模型准备中'}
+                  {task.started_at && ` · 已用 ${elapsed(task.started_at, now)}`}
+                </p>
+                {task.activity && (
+                  <p>
+                    {task.activity.label ?? stages[task.activity.kind] ?? task.activity.kind}
+                    {' · 最近活动 '}
+                    {elapsed(task.activity.at, now)}前
+                  </p>
+                )}
+              </div>
+              <button onClick={() => select(task.request_id)}>
+                查看 Issue #{task.issue_number}
+              </button>
+            </div>
+          ))}
           {monitor && (
             <p className="live-monitor-time">
               上次完成 GitHub 检查：{time(monitor.last_poll_finished_at)}
@@ -385,8 +416,8 @@ export function LiveWorkbench() {
                 </article>
               ))}
               <p className="live-muted">
-                这些 Issue
-                尚未启动，不计入正在执行。按登记值发布新的 Issue 和任务编号，原任务记录保留。
+                这些 Issue 尚未启动，不计入正在执行。按登记值发布新的 Issue
+                和任务编号，原任务记录保留。
               </p>
               {monitor?.rejections_truncated && (
                 <p className="live-muted">仅显示前 50 项未领取原因。</p>

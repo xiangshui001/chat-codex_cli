@@ -70,6 +70,54 @@ const monitor = {
   ],
 };
 
+test('parallel tasks show separate models and navigation on a narrow screen', async ({ page }) => {
+  const secondId = '10000000-0000-4000-8000-000000000003';
+  const first = { ...task, model: 'gpt-6.1-sol' };
+  const second = {
+    ...task,
+    request_id: secondId,
+    issue_number: 10,
+    model: 'example-model',
+    activity: {
+      kind: 'api_model_request',
+      at: task.started_at,
+      label: '正在等待模型回复（第 65 轮，无操作次数上限）',
+    },
+  };
+  await page.route('**/api/mvp1/**', (route) =>
+    route.fulfill({
+      json: route.request().url().endsWith('overview')
+        ? {
+            source: 'local-mvp2',
+            observed_at: task.created_at,
+            host_id: 'desktop',
+            owner: 'example',
+            listener: 'running',
+            counts: { running: 2 },
+            tasks: [first, second],
+            limit: 100,
+            max_parallel_tasks: 3,
+            monitor: { ...monitor, phase: 'executing', rejected: [] },
+          }
+        : { ...detail, ...(route.request().url().endsWith(secondId) ? second : first) },
+    }),
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/?view=live');
+  const status = page.getByRole('region', { name: '当前运行状态' });
+  await expect(status).toContainText('同时处理 2 个任务');
+  await expect(status).toContainText('并发任务：2 / 3');
+  await expect(status).toContainText('gpt-6.1-sol');
+  await expect(status).toContainText('example-model');
+  await expect(status).toContainText('第 65 轮');
+  await status.getByRole('button', { name: '查看 Issue #10' }).click();
+  await expect(page.getByRole('heading', { name: 'Issue #10' })).toBeVisible();
+  await expect(status).toContainText('Issue #8');
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
+});
+
 test('unclaimed issues explain idle status and invalid model choices', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.route('**/api/mvp1/overview', (route) =>

@@ -120,7 +120,7 @@ class Reader:
         db.row_factory = sqlite3.Row
         db.execute('PRAGMA query_only=ON')
         try:
-            if db.execute('PRAGMA user_version').fetchone()[0] != self.schema_version:
+            if db.execute('PRAGMA user_version').fetchone()[0] not in getattr(self, 'supported_schemas', (self.schema_version,)):
                 raise ValueError('Unsupported state schema')
             binding = db.execute('SELECT owner,host_id,workspace_root FROM settings WHERE id=1').fetchone()
             if binding is None or tuple(binding) != (self.config.owner, self.config.host_id, str(self.config.workspace_root)):
@@ -195,8 +195,8 @@ class Reader:
                               'SELECT kind,at,detail FROM events WHERE task_id=? ORDER BY id LIMIT 500', (row['id'],))])
             recent = db.execute('SELECT kind,at,detail FROM events WHERE task_id=? ORDER BY id DESC LIMIT 1', (row['id'],)).fetchone()
             result['activity'] = self.latest_activity(request_id, recent)
-            repository_id = row['target_id'] if self.schema_version == 3 else row['repository_id']
-            diff_base = row['base_sha'] if self.schema_version == 3 else 'HEAD'
+            repository_id = row['target_id'] if self.schema_version >= 3 else row['repository_id']
+            diff_base = row['base_sha'] if self.schema_version >= 3 else 'HEAD'
         finally:
             db.close()
         evidence = self.config.state_dir / 'runs' / request_id
@@ -227,13 +227,15 @@ class Reader:
 
 class DesktopReader(Reader):
     database_name = 'mvp2.sqlite3'
-    schema_version = 3
+    schema_version = 4
+    supported_schemas = (3, 4)
     source = 'local-mvp2'
     task_select = 'SELECT tasks.*,deliveries.* FROM tasks JOIN deliveries ON deliveries.task_id=tasks.id'
 
     def overview(self):
         result = super().overview()
         result['monitor'] = self.monitor()
+        result['max_parallel_tasks'] = self.config.max_parallel_tasks
         return result
 
     def monitor(self):

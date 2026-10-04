@@ -5,6 +5,7 @@ import argparse
 from dataclasses import replace
 import json
 import logging
+import multiprocessing
 import os
 from pathlib import Path
 import signal
@@ -23,10 +24,36 @@ LOG = logging.getLogger("codex-v2-mvp2")
 
 
 class DesktopStore(AccountStore):
-    schema_version = 3
+    schema_version = 4
+
+    @classmethod
+    def migrate(cls, path):
+        """Explicit idle-only engine migration; frozen task rows remain unchanged."""
+        with sqlite3.connect(path, isolation_level=None) as db:
+            version = db.execute("PRAGMA user_version").fetchone()[0]
+            if version == cls.schema_version:
+                return
+            if version != 3:
+                raise MvpError("unsupported_mvp_schema")
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                if db.execute("SELECT 1 FROM tasks WHERE state IN ('queued','running')").fetchone():
+                    raise MvpError("migration_requires_idle")
+                db.execute("DROP INDEX one_active_task")
+                db.execute("CREATE INDEX active_tasks ON tasks(state) WHERE state IN ('queued','running')")
+                db.execute("PRAGMA user_version=4")
+                db.execute("COMMIT")
+            except BaseException:
+                db.execute("ROLLBACK")
+                raise
 
     def __init__(self, path):
         super().__init__(path)
+        self.path = path
+        # A fresh Store creates the inherited serial index; schema 4 uses atomic capacity checks.
+        with self.transaction():
+            self.db.execute("DROP INDEX IF EXISTS one_active_task")
+            self.db.execute("CREATE INDEX IF NOT EXISTS active_tasks ON tasks(state) WHERE state IN ('queued','running')")
         self.db.executescript("""
             CREATE TABLE IF NOT EXISTS deliveries (
                 task_id INTEGER PRIMARY KEY REFERENCES tasks(id), source_repo TEXT NOT NULL,
@@ -38,13 +65,23 @@ class DesktopStore(AccountStore):
                 backend TEXT NOT NULL, context_path TEXT, updated_at TEXT NOT NULL);
         """)
 
-    def claim_desktop(self, source, target, issue, task, snapshot):
+    def active_tasks(self):
+        return self.db.execute("SELECT * FROM tasks WHERE state IN ('queued','running') ORDER BY id").fetchall()
+
+    def claim_desktop(self, source, target, issue, task, snapshot, max_parallel_tasks=1):
         with self.transaction():
             if self.db.execute("SELECT 1 FROM tasks WHERE request_id=? OR (repository_id=? AND issue_id=?)",
                                (task.request_id, source.id, issue["id"])).fetchone():
                 return None
-            if self.unfinished():
-                raise MvpError("unfinished_task_requires_manual_inspection")
+            active = self.active_tasks()
+            if len(active) >= max_parallel_tasks:
+                raise MvpError("unfinished_task_requires_manual_inspection" if max_parallel_tasks == 1 else "parallel_capacity_reached")
+            if task.session['mode'] == 'resume':
+                for row in active:
+                    delivery = self.delivery(row['id'])
+                    session = json.loads(delivery['options_json'])['session']
+                    if task.session['id'] in {session.get('id'), delivery['session_id']}:
+                        raise MvpError("session_busy")
             cursor = self.db.execute("""INSERT INTO tasks(repository_id,issue_id,issue_number,request_id,
                 host_id,repo,state,base_sha,prompt,write_paths,comment_id,contract_hash,created_at)
                 VALUES(?,?,?,?,?,?,'queued',?,?,?,?,?,?)""",
@@ -194,6 +231,50 @@ class DesktopPoller:
         self.publisher = publisher or Publisher(self.github, store)
         self.errors = 0
         self.status = ListenerStatus(config)
+        self.workers = {}
+
+    def reap_workers(self):
+        for task_id, process in list(self.workers.items()):
+            if not process.is_alive():
+                process.join()
+                del self.workers[task_id]
+
+    def start_worker(self, task_id, task, target, known_session):
+        process = multiprocessing.get_context('fork').Process(
+            target=self.worker_execute, args=(task_id, task, target, dict(known_session) if known_session else None))
+        process.start()
+        self.workers[task_id] = process
+
+    def worker_execute(self, task_id, task, target, known_session):
+        def stop(*_):
+            signal.signal(signal.SIGTERM, signal.SIG_IGN)
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            raise KeyboardInterrupt()
+        signal.signal(signal.SIGTERM, stop)
+        signal.signal(signal.SIGINT, stop)
+        path = self.store.path
+        self.store.close()
+        self.store = DesktopStore(path)
+        if isinstance(self.publisher, Publisher):
+            self.publisher = Publisher(self.github, self.store)
+        try:
+            self.execute(task_id, task, target, known_session)
+        except KeyboardInterrupt:
+            # execute/runner records interruption and cleanup; uncertain rows stay blocked.
+            pass
+        finally:
+            self.store.close()
+
+    def stop_workers(self):
+        # Interrupt workers so each runner can terminate its own model process group.
+        for process in self.workers.values():
+            if process.is_alive():
+                os.kill(process.pid, signal.SIGINT)
+        for process in self.workers.values():
+            process.join(timeout=10)
+        if any(process.is_alive() for process in self.workers.values()):
+            raise MvpError('process_cleanup_failed')
+        self.workers.clear()
 
     def send_receipt(self, row):
         d = self.store.delivery(row["id"])
@@ -325,6 +406,7 @@ class DesktopPoller:
         self.finish_publication(task_id)
 
     def once(self):
+        self.reap_workers()
         self.status.begin()
         try:
             count = self._once()
@@ -332,6 +414,8 @@ class DesktopPoller:
             self.status.finish(self.errors, str(exc))
             raise
         self.status.finish(self.errors)
+        if self.workers:
+            self.status.update(phase='executing')
         return count
 
     def _once(self):
@@ -339,17 +423,18 @@ class DesktopPoller:
         repos = self.github.repositories()
         self.status.update(repository_count=len(repos))
         self.store.bind(self.config, self.github.owner_id)
-        active = self.store.unfinished()
-        if active:
+        for active in self.store.active_tasks():
+            if active['id'] in self.workers:
+                continue
             d = self.store.delivery(active["id"])
             # Resume only publication, never replay a model execution after a crash.
             if not d or not d["execution_completed"] or d["publication_state"] == "committing":
                 raise MvpError("unfinished_task_requires_manual_inspection")
             self.status.update(phase='publishing')
             self.finish_publication(active["id"])
-            return 0
         for row in self.store.pending_receipts():
-            self.send_receipt(row)
+            if row['id'] not in self.workers:
+                self.send_receipt(row)
         candidates = []
         for index, source in enumerate(repos):
             client = self.github.client(source)
@@ -360,7 +445,10 @@ class DesktopPoller:
                 self.errors += 1
                 LOG.error("repository_poll_failed repository_id=%s code=%s", source.id, exc)
             self.status.update(checked_repositories=index + 1, error_count=self.errors)
+        count = 0
         for _, source, client, issue in sorted(candidates, key=lambda c: c[0]):
+            if len(self.store.active_tasks()) >= self.config.max_parallel_tasks:
+                break
             task = None
             try:
                 comments = client.comments(positive_id(issue.get("number")))
@@ -378,7 +466,8 @@ class DesktopPoller:
                     raise MvpError("authorization_changed")
                 snapshot = {"host_id": self.config.host_id, "hub_repo": self.config.hub_repo,
                             "registry": {"providers": self.registry.providers, **self.registry.limits}}
-                task_id = self.store.claim_desktop(source, target, issue, task, snapshot)
+                snapshot['max_parallel_tasks'] = self.config.max_parallel_tasks
+                task_id = self.store.claim_desktop(source, target, issue, task, snapshot, self.config.max_parallel_tasks)
             except MvpError as exc:
                 if str(exc) != "wrong_host":
                     LOG.warning("task_rejected repository_id=%s issue=%s code=%s", source.id, issue.get("number"), exc)
@@ -386,9 +475,12 @@ class DesktopPoller:
                 continue
             if task_id is not None:
                 self.status.update(phase='executing')
-                self.execute(task_id, task, target, known_session)
-                return 1
-        return 0
+                if self.config.max_parallel_tasks == 1:
+                    self.execute(task_id, task, target, known_session)
+                    return 1
+                self.start_worker(task_id, task, target, known_session)
+                count += 1
+        return count
 
 
 def main(argv=None):
@@ -397,6 +489,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--once", action="store_true")
     mode.add_argument("--list-repos", action="store_true")
+    mode.add_argument("--migrate-state", action="store_true", help="Explicitly migrate idle MVP-2 engine state from schema 3 to 4")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if os.name != "posix":
@@ -417,7 +510,18 @@ def main(argv=None):
         config.workspace_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         # The same root lock as MVP-1 prevents competing controllers in a shared root.
         with exclusive_lock(config.state_dir / "poller.lock"), exclusive_lock(config.workspace_root / ".mvp1.lock"):
+            if args.migrate_state:
+                path = config.state_dir / 'mvp2.sqlite3'
+                if not path.is_file() or path.is_symlink():
+                    raise MvpError('state_database_missing')
+                backup = path.with_name('mvp2-schema3-backup-' + utc_now().replace(':', '-') + '.sqlite3')
+                with sqlite3.connect(path) as source, sqlite3.connect(backup) as destination:
+                    source.backup(destination)
+                DesktopStore.migrate(path)
+                print('Engine state migrated to schema 4; existing tasks and sessions retained.')
+                return 0
             store = DesktopStore(config.state_dir / "mvp2.sqlite3")
+            poller = None
             try:
                 poller = DesktopPoller(config, store, github, registry)
                 while True:
@@ -425,18 +529,23 @@ def main(argv=None):
                         count = poller.once()
                     except MvpError as exc:
                         LOG.error("poll_failed code=%s", exc)
-                        if args.once or store.unfinished():
+                        if args.once or (store.unfinished() and not poller.workers):
                             return 1
                         import time
                         time.sleep(config.poll_seconds)
                         continue
                     LOG.info("poll_complete new_tasks=%s repository_errors=%s", count, poller.errors)
                     if args.once:
+                        for process in poller.workers.values():
+                            process.join()
+                        poller.reap_workers()
                         return int(bool(poller.errors or store.unfinished() or store.pending_receipts()) or
-                                   bool(count and store.db.execute("SELECT state FROM tasks ORDER BY id DESC LIMIT 1").fetchone()[0] != "succeeded"))
+                                   bool(count and store.db.execute("SELECT 1 FROM (SELECT state FROM tasks ORDER BY id DESC LIMIT ?) WHERE state!='succeeded'", (count,)).fetchone()))
                     import time
                     time.sleep(config.poll_seconds)
             finally:
+                if poller is not None:
+                    poller.stop_workers()
                 store.close()
     except KeyboardInterrupt:
         return 130
