@@ -1,3 +1,5 @@
+> 历史档案：以下记录旧阶段，不作为当前安装说明。[当前版本入口](../../../README.md)。
+
 # V2 MVP-0：GitHub Issue → 本机 Codex CLI → Issue 回执
 
 MVP-0 是独立、受限的连通性验证入口，基于 `design/v2-issue-workbench` 的 `5a4422b` 开发。完整 [V2 设计](V2设计方案.md)、[协议与恢复](V2协议与恢复.md) 和 [实施验收](V2实施验收.md) 保留为未来目标。本轮不实现完整 M1～M5，不改 main，不修改现役 `codex-github-local/`。
@@ -22,7 +24,7 @@ python3 -m venv /ABS/PATH/mvp0-venv
 
 执行环境须具备 Python 3.11+、Git、已登录的 GitHub CLI `gh` 和已登录的 Codex CLI。GitHub 凭据只通过现有 `gh` 使用，不新增模型 API 或密钥管理。CLI 参数已对本电脑的 0.160.0 帮助文本核对；Linux/WSL 上安装的实际版本仍需现场验证。
 
-复制 [配置示例](../codex-github-local-v2/examples/mvp0-config.example.json) 到本机私有目录，替换占位符：
+复制 [配置示例](../examples/mvp0-config.example.json) 到本机私有目录，替换占位符：
 
 ```json
 {

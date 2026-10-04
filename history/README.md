@@ -2,11 +2,14 @@
 
 这些资料保留当时结论，不作为当前安装说明。最新入口见[仓库主页](../README.md)。
 
-- [V1 使用手册](../docs/v1/用户使用手册.md) / [V1 Chat 手册](../docs/v1/Chat协作手册.md)：仅供现役 V1 使用。
+- [V1 使用手册](v1/docs/用户使用手册.md) / [V1 Chat 手册](v1/docs/Chat协作手册.md)：完整旧版本归档，退出当前入口。
 - [2026-09-28 验证记录](VALIDATION-20260928.md)与 [发布清单](PUBLICATION-20260928.json)：清单路径和哈希对应当时快照，不对应当前目录。
 - [2026-10-02 集成决策](INTEGRATION-20261002.md) / [Harness 验证](HARNESS_VALIDATION-20261002.md)：保留原型阶段证据。
 - [前端早期交接](frontend/HANDOFF.md) / [组件库交接](frontend/LIBRARY_HANDOFF.md)。
-- `../validation/` 下 JSON 为历史脱敏证据，不能当作本轮运行结果。
+- `v1/validation/` 下 JSON 为历史脱敏证据，不能当作本轮运行结果。
+
+- [V1 完整源码、测试与旧 CI](v1/README.md)
+- [早期 V2 文档与示例](v2/README.md)
 
 ## 原迁移记录
 
@@ -18,4 +21,4 @@
 4. 增补原生 CLI 交互操作手册。手动 Issue 不进入自动队列；不同克隆使用同一远端，仍需协调主线变化。
 5. 2026-09-28 归档为公开管理仓库：将项目专属 profile 替换为通用 example.json，调整安装入口默认 profile 和测试读取路径；执行器、桥接核心与 schema 保持原字节。两份手册改为通用路径，真实业务记录只保留脱敏结论。
 
-`codex-github-local/tests/upstream/` 是原启动演示的测试夹具，使用最小适配后的引擎，不是生产业务仓库。原始与适配引擎的差异摘要在 validation/historical/engine-delta.json。
+`v1/codex-github-local/tests/upstream/` 是原启动演示的测试夹具，使用最小适配后的引擎，不是生产业务仓库。原始与适配引擎的差异摘要在 validation/historical/engine-delta.json。

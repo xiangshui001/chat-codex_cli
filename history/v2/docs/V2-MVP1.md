@@ -1,3 +1,5 @@
+> 历史档案：以下记录旧阶段，不作为当前安装说明。[当前版本入口](../../../README.md)。
+
 # MVP-1：账号内仓库发现与按需工作区
 
 在 MVP-0 上增加单个个人账号名下仓库自动发现、授权后按需克隆、所有仓库共用串行队列。V1 和 MVP-0 入口保留，不实现完整 M1～M5、模型 API、多 Host、自动 PR / merge 或完整恢复。0.0.6 新增[本机只读工作台](MVP1-WORKBENCH.md)，可查看真实执行过程，不提供执行控制。
@@ -19,7 +21,7 @@ python3 -m venv /ABS/PATH/mvp1-venv
 /ABS/PATH/mvp1-venv/bin/pip install ./codex-github-local-v2
 ```
 
-把 [配置示例](../codex-github-local-v2/examples/mvp1-config.example.json) 复制到本机私有目录：
+把 [配置示例](../examples/mvp1-config.example.json) 复制到本机私有目录：
 
 ```json
 {

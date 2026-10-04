@@ -1,13 +1,12 @@
 # 当前模块边界
 
-当前链路：目标仓库或 hub 的 GitHub Issue → MVP-2 Host 路由 → SQLite 领取去重 → 独立目标仓库克隆 → 指定对话/模型执行 → 本地成果 → 专用分支与草稿 PR → 原 Issue 完成回执。只读工作台读取数据库、事件和日志。
+当前链路：目标仓库或记录仓库的 GitHub Issue → 机器精确路由 → SQLite 领取去重 → 独立目标仓库克隆 → 指定对话/模型执行 → 本地成果 → 专用分支与草稿 PR → 原 Issue 完成回执。
 
-- `codex-github-local-v2` 0.1.0：`mvp2` 为当前模式；`mvp1` / `mvp0` 保留旧协议；`workbench --protocol mvp2` 读取新状态库。
-- `model-api` 独立提供本机 HTTP 文本协作服务；GPT 主导任务还使用本轮专属 stdio MCP 调用登记的外部模型。其它模型模式直接运行受限文件工具，不启动 Codex。
-- `web/app`：默认真实工作台；只有 `?view=demo` 才加载 Mock 演示，`?harness=local-smoke` 为确定性开发测试。后者不是 GitHub → Codex 真机验证。
-- 原型 `codex-github-local-v2` / `codex-github-local-v2-control` CLI 与 Harness 契约保留用于开发，不是日常 MVP-1 的启动入口。
-- `codex-github-local/`：独立 V1 0.1.0，不随本次整理迁移或修改。
+- `codex-github-local-v2` 和兼容别名 `codex-github-local-v2-mvp2` 均进入最新监听器，使用 schema 3 的 `mvp2.sqlite3`。
+- `model-api` 提供鉴权的本机 HTTP 文本协作，以及 GPT 任务专属 stdio MCP 顾问工具。
+- `workbench` 默认读取最新数据库、事件、日志和发布进度；保留显式旧协议读取以兼容已有本机数据。
+- `web/app` 默认真实工作台；`?view=demo` 显式加载演示，`?harness=local-smoke` 用于确定性开发测试。
+- 早期 V2 原型的公共命令已退出安装入口，当前实现复用的模块和回归测试保留。
+- V1 源码、测试、旧手册和 CI 快照在 [history/v1](../history/v1/README.md)，早期 V2 文档及示例在 [history/v2](../history/v2/README.md)。
 
-实际交付以 [MVP-2 协议](V2-MVP2.md)为准；完整 V2 的审批与恢复设计仍包含未来功能。架构目标看 [V2 设计](V2设计方案.md)。
-
-旧吸收决策与上游来源保存在 [2026-10-02 集成记录](../history/INTEGRATION-20261002.md)，旧确定性测试保存在 [Harness 记录](../history/HARNESS_VALIDATION-20261002.md)。第三方 NOTICE 与许可证继续保留。
+当前能力以[配置与协议](V2-MVP2.md)为准。历史设计和旧验证只描述当时阶段，不能作为当前部署说明。第三方来源及许可证继续保留在 [NOTICE](../web/app/NOTICE.md)。

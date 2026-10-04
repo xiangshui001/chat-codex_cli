@@ -1,23 +1,21 @@
-# V2 执行端与本机工作台（0.1.0）
+# 当前执行端与本机工作台（V2 0.1.0 / MVP-2）
 
-当前日常入口为 MVP-2：账号仓库发现、Host 精确路由、新/旧对话、三种模型模式、本地保留成果、完成回执与草稿 PR。与 V1 / MVP-1 分开安装、配置和存储，不迁移旧状态。
+支持账号仓库发现、机器精确路由、新/旧对话、三种模型模式、本地成果、完成回执与草稿 PR。账号和路径按自己的电脑配置。
 
-- [MVP-2 安装 / 配置 / 协议 / API](../docs/V2-MVP2.md)
-- [保留的 MVP-1 协议](../docs/V2-MVP1.md)
-- [只读真实工作台](../docs/MVP1-WORKBENCH.md)
-- [MVP-0 单仓库验证](../docs/V2-MVP.md)
-- [当前验证范围](../docs/VALIDATION.md)
+- [首次安装](../docs/安装说明.md)
+- [中文 HTML 使用指南](../docs/使用指南.html)
+- [配置、派单协议与 API](../docs/V2-MVP2.md)
+- [验证范围](../docs/VALIDATION.md)
 
-## 命令入口
+## 安装后的命令
 
 | 命令 | 作用 |
 |---|---|
-| `codex-github-local-v2-mvp1` | 保留的账号内串行执行、仅本地成果 |
-| `codex-github-local-v2-mvp2` | Host 路由、会话续接、三种模型模式与草稿 PR |
-| `codex-github-local-v2-model-api` | 本机 HTTP 文本协作 API / GPT 的 stdio MCP 顾问工具 |
-| `codex-github-local-v2-workbench` | 本机只读 API 与构建后的前端 |
-| `codex-github-local-v2-mvp0` | 早期单仓库验证入口 |
-| `codex-github-local-v2` | 保留的策略 / 执行原型，开发使用 |
-| `codex-github-local-v2-control` | 保留的控制 Harness，开发使用 |
+| `codex-github-local-v2` | 默认最新监听器 |
+| `codex-github-local-v2-mvp2` | 同一监听器的兼容别名 |
+| `codex-github-local-v2-model-api` | 本机 HTTP 文本协作 API / stdio MCP 顾问工具 |
+| `codex-github-local-v2-workbench` | 默认读取最新状态的只读 API 与前端 |
 
-MVP-2 的实际能力与恢复边界以 [MVP-2 协议](../docs/V2-MVP2.md)为准；成果保存在本地任务目录并提交草稿 PR，人工合并。完整目标继续保留于 [V2 设计](../docs/V2设计方案.md)；原型接口和测试不表示所有设计能力已交付。
+当前安装包不再注册 control / MVP-0 / MVP-1 原型命令。被当前实现复用的内部模块和测试仍在源码中；历史说明和示例见 [history/v2](../history/v2/README.md)。V1 单独归档在 [history/v1](../history/v1/README.md)。
+
+升级使用新的私有虚拟环境、状态目录和工作区；不覆盖旧数据库，不自动重放旧任务。任务 PR 仍需人工审查合并。

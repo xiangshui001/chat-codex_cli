@@ -1,0 +1,4 @@
+# Preserve the original bytes of archived V1 sources and evidence.
+history/v1/codex-github-local/**/*.py -text
+history/v1/codex-github-local/**/*.json -text
+history/v1/validation/** -text

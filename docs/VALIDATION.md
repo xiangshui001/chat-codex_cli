@@ -1,32 +1,36 @@
 # 验证范围
 
-## MVP-2 功能交付（2026-10-04，本电脑）
+## 当前版本与历史归档检查（2026-10-04）
 
-本轮亲自执行的检查：Ubuntu / WSL V2 后端 **200 项**、V1 回归 **53 项**全部通过，无跳过；前端构建和 **15 项**单元测试通过；**23 项**浏览器测试通过（原有 22 项，加 MVP-2 会话、型号/effort、hub Issue 和 PR 展示测试）。浏览器测试使用可控数据。
+当前执行端在 Ubuntu / WSL 通过 **201 项后端测试**，其中新增检查确认默认工作台命令读取最新数据库、不创建旧数据库。归档 V1 的 **53 项 POSIX 回归**通过，无跳过；V1 的 23 个非 Markdown 源码、配置及测试文件移动前后 SHA-256 一致。
 
-真实 GitHub 与本机执行链路通过：
+公开文档检查覆盖当前及历史的 37 份 Markdown 文件链接、离线 HTML 锚点、首次配置生成与拒绝覆盖已有文件、当前配置和模型示例。HTML 表单在任意示例账号 sample-owner、机器 laptop、记录仓库 task-records 下生成 12 种模式/对话/来源组合，均通过真实后端协议解析；复制、UUID 更新、非法路径/账号/机器输入和 320 / 390 / 768 / 1440 宽度检查通过，没有脚本错误或自动网络请求。
 
-- hub Issue → 新 GPT CLI 对话 → 本地文件 → commit/push → 目标仓库草稿 PR → 原 Issue 回执。
-- 目标仓库 Issue → 精确续接同一会话 UUID → 在新工作目录写出上一轮仅在对话中给出的校验码 → PR 与回执。新一轮任务没有重复提供校验码，确认保留对话上下文。
-- GPT CLI 主导 → 本轮 MCP 工具 → 本地 OpenAI 兼容模拟 API → GPT 按咨询结果写文件 → PR 与回执。
-- 其它 API 单独执行 → 本地 OpenAI 兼容模拟 API 文件工具 → PR 与回执；没有启动 Codex CLI 或调用 GPT。
+安装包已在独立虚拟环境验证四个当前入口，默认命令进入最新监听器；旧 control / MVP-0 / MVP-1 公共命令不再注册。CI 持续运行当前后端、归档回归、文档和安装检查。旧 V1 工作流只作为 history 内的快照保留。
 
-后两项验证了协议及执行端协作，但**没有调用真实第三方厂商 API**。本机没有配置真实第三方密钥，也没有配置独立 OpenAI HTTP API key；HTTP 三种模式、Responses reasoning/function call 回放、effort 映射、鉴权和文件权限使用本地 HTTP 测试服务验证。GPT CLI 使用本机已有 ChatGPT 登录，真实调用已通过。
+## 功能交付验证（2026-10-04）
 
-首轮 GPT 主导 smoke 因 MCP 未继承密钥变量而失败，原失败任务和回执保留。补充显式环境变量名转发及回归测试后，以新 request_id 验证通过；没有编辑或重放已冻结任务。
+此前同一实现分支的前端构建、**15 项前端单元测试**与 **23 项浏览器测试**通过。界面测试使用可控任务数据；本次归档和指南整理没有修改前端执行逻辑。
 
-当前本机 `desktop` 监听、只读工作台和鉴权模型 API 已作为 WSL 用户服务启动，成功发现 12 个可用的本人仓库，轮询无仓库错误。安装采用独立 V2 0.1.0 环境和 schema 3 状态。旧监听器确认无未完成任务后停止；原数据库和成果保留。
+实际 GitHub 和本机 CLI 链路通过：
 
-详细链接、commit、session_id 与本机部署摘要见 [codex-cli MVP-2 真机记录](https://github.com/xiangshui001/codex-cli/blob/desktop-mvp2-records-20261004/docs/MVP2_DESKTOP_SMOKE_2026-10-04.md)，可能需要该仓库权限。真实配置、凭据、任务数据库、工作目录和原始模型日志不进入公开工具仓库。
+- 记录仓库 Issue → 新 GPT CLI 对话 → 本地文件 → commit / push → 目标仓库草稿 PR → 原 Issue 回执。
+- 目标仓库 Issue → 指定同一会话 UUID 续接 → 在新工作目录写出上一轮仅在对话中提供的校验码 → PR 与回执。
+- GPT CLI 主导 → 本轮 MCP → 本地 OpenAI 兼容模拟 API → GPT 按咨询结果写文件 → PR 与回执。
+- 其它 API 单独执行 → 本地兼容模拟 API 的文件工具 → PR 与回执；没有启动 Codex CLI。
 
-## 范围限制
+后两项验证的是兼容协议与执行链路，**没有调用真实第三方厂商 API**。HTTP 三模式、Responses reasoning / function call 回放、effort 映射、鉴权和文件权限由本地 HTTP 测试服务验证。真实第三方厂商接口与独立 OpenAI HTTP API key 需用户在自己的电脑配置和验收。
 
-验证范围是当前电脑的 Ubuntu / WSL、GitHub 账号与本机浏览器，不能代表其它电脑。用户服务在 WSL 启动后自动运行；没有安装 Windows 开机或唤醒任务，没有验证远程访问或完整断电恢复。
+首轮 GPT 主导 smoke 曾因 MCP 未继承密钥变量失败；修复显式变量转发并补充回归后，以新 request_id 验证通过。原失败记录保留，未编辑或重放冻结任务。真实配置、会话、数据库、工作区和原始日志只在执行机保存。
 
-API 单独执行仅提供受授权路径约束的文件工具，不提供任意 shell；生成文件不代表已运行项目测试。工作台只读，HTTP API 仅作文本协作。PR 为草稿，仍需人工审查合并。无文件变化时不创建空 PR。
+## 实际边界
+
+已验证执行端为 Linux / Ubuntu / WSL，不能据此声明原生 Windows、macOS 或所有电脑通过。Windows 使用 WSL；各电脑需独立配置 owner、唯一 host_id 和私有绝对路径。项目不自动安装开机或唤醒服务。
+
+API 单独执行仅提供受路径约束的文件工具，不提供任意 shell；生成文件不代表已运行项目测试。工作台只读，HTTP API 用于文本协作。任务 PR 是草稿，需人工审查合并；无文件变化不创建空 PR。
+
+网络发布失败可在确定执行完成后补做发布；执行或 commit 不确定时停止领取并保留现场。完整断电恢复、取消、重跑及容器隔离尚未实现。
 
 ## 历史阶段
 
-MVP-0 / MVP-1 阶段性结论见 [MVP0_RESULT](MVP0_RESULT.md)、[MVP1_RESULT](MVP1_RESULT.md)；之前工作台真机记录见 [工作台验证](https://github.com/xiangshui001/codex-cli/blob/workbench-records-20261004/docs/WORKBENCH_SMOKE_2026-10-04.md)。旧阶段测试数量、分支状态与用户回传证据只描述当时情况，不能代替本轮亲自执行结果。
-
-[历史验证档案](../history/VALIDATION-20260928.md)及 `validation/` 下 JSON 继续保留为当时证据。
+旧版本记录在 [V1 归档](../history/v1/README.md)和[早期 V2 归档](../history/v2/README.md)。历史脱敏 JSON 在 history/v1/validation；其中的路径和哈希只描述当时快照。阶段测试数量、旧分支状态和历史用户回传证据不代替当前版本验收。

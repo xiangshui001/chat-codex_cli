@@ -273,7 +273,7 @@ def main(argv=None):
     parser.add_argument('--config', required=True, type=Path)
     parser.add_argument('--dist', required=True, type=Path)
     parser.add_argument('--port', default=8791, type=int)
-    parser.add_argument('--protocol', choices=('mvp1', 'mvp2'), default='mvp1')
+    parser.add_argument('--protocol', choices=('mvp1', 'mvp2'), default='mvp2')
     args = parser.parse_args(argv)
     if not (args.dist / 'index.html').is_file():
         parser.error('Build web/app first (npm run build)')

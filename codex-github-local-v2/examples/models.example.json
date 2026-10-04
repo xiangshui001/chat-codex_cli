@@ -5,7 +5,7 @@
       "base_url": "https://api.openai.com/v1",
       "api_key_env": "OPENAI_API_KEY",
       "wire_api": "responses",
-      "models": ["gpt-6.1-sol"],
+      "models": ["gpt-YOUR_HTTP_MODEL"],
       "reasoning_parameter": "reasoning.effort",
       "effort_map": {"low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh"}
     },

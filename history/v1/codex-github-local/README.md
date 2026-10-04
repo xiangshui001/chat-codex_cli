@@ -1,8 +1,10 @@
+> 历史 V1：已退出当前安装入口。[当前版本](../../../README.md)。
+
 # codex-github-local 0.1.0
 
 运行组件：bridge.py、engine/runner.py、handoff_check.py。Ubuntu / Linux 运行；Python 只使用标准库，外部需要 Git、GitHub CLI 和已登录的 Codex CLI。
 
-完整入口见 [用户使用手册](../docs/用户使用手册.md) 和 [Chat 协作手册](../docs/Chat协作手册.md)。
+完整入口见 [V1 用户使用手册](../docs/用户使用手册.md) 和 [V1 Chat 协作手册](../docs/Chat协作手册.md)。
 
 ```bash
 python3 verify.py

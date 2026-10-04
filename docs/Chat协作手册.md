@@ -1,10 +1,10 @@
 # Chat 协作手册：MVP-2
 
-当前协议为 `[codex-v2-mvp2]`，完整示例见 [MVP-2](V2-MVP2.md)。既有 MVP-1 使用[原协议](V2-MVP1.md)，V1 使用 [V1 手册](v1/Chat协作手册.md)。前缀、状态目录和授权不能混用。
+当前协议为 `[codex-v2-mvp2]`，完整示例见 [MVP-2](V2-MVP2.md)。账号、机器标识及模型根据执行端配置填写；不预设某个用户或某台电脑。
 
 ## 发布任务
 
-1. 根据用户授权明确目标仓库、执行机 host_id、允许写路径、任务要求、新/旧对话、模型模式/型号/思考强度。台式机标识为 `desktop`，它不是模型名。
+1. 根据用户授权明确目标仓库、执行机 host_id、允许写路径、任务要求、新/旧对话、模型模式/型号/思考强度。`desktop` 只是机器标识示例，它不是模型名；每台电脑必须有唯一标识。
 2. 读取目标默认分支当前完整 40 位 SHA。空仓库必须先有初始提交。为每次任务生成新的规范 UUID request_id。
 3. Issue 发布在目标仓库，或执行机配置的 hub_repo（例如本人 codex-cli）。授权 JSON 的 repo 始终为实际工作目标。只向本人拥有且两端凭据均可访问的仓库派单。
 4. 创建标题以 `[codex-v2-mvp2]` 开头的开放 Issue，添加唯一、未编辑的 owner 授权评论。第一行 `/codex-v2-mvp2 run`，后接 JSON，顶层仅含 request_id、host_id、repo、base_sha、session、models、task；task 仅含 prompt 和 write_paths。

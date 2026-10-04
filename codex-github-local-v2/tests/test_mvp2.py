@@ -125,6 +125,26 @@ class ContractTests(Fixture):
         self.assertEqual(task['session_id'], SID)
         self.assertEqual(task['model'], 'gpt-5.4')
 
+    def test_workbench_default_command_reads_current_database(self):
+        from codex_github_local_v2.workbench import main
+        self.store()
+        config_file = self.root / 'config.json'
+        config_file.write_text(json.dumps({
+            'owner': self.config.owner, 'host_id': self.config.host_id,
+            'workspace_root': str(self.config.workspace_root), 'state_dir': str(self.config.state_dir),
+            'hub_repo': self.config.hub_repo, 'models_file': str(self.models)
+        }))
+        dist = self.root / 'dist'
+        dist.mkdir()
+        (dist / 'index.html').write_text('<html></html>')
+        with patch('codex_github_local_v2.workbench.create_server') as create:
+            create.return_value.__enter__.return_value.server_port = 8791
+            with patch('builtins.print'):
+                self.assertEqual(main(['--config', str(config_file), '--dist', str(dist)]), 0)
+        reader = create.call_args.args[0]
+        self.assertEqual(reader.overview()['source'], 'local-mvp2')
+        self.assertFalse((self.config.state_dir / 'mvp1.sqlite3').exists())
+
 
 class PollerTests(Fixture):
     def setUp(self):
