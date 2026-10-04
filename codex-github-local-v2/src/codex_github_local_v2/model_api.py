@@ -13,6 +13,7 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 from .mvp0 import fields, read_json, text
 from .mvp0_runner import MvpError
 from .mvp2_contract import NAME, model_options, selection
+from .api_recovery import ResponseRecovery
 
 MAX_BYTES = 2 * 1024 * 1024
 
@@ -25,7 +26,7 @@ class NoRedirect(HTTPRedirectHandler):
 class ModelRegistry:
     def __init__(self, path: Path):
         data = read_json(path.read_text(encoding="utf-8"))
-        fields(data, {"providers"}, {"max_turns", "max_calls", "request_timeout", "max_output_tokens"})
+        fields(data, {"providers"}, {"max_turns", "max_calls", "request_timeout", "max_output_tokens", "recovery_max_output_tokens"})
         self.providers = data["providers"]
         if not isinstance(self.providers, dict):
             raise MvpError("invalid_providers")
@@ -35,11 +36,14 @@ class ModelRegistry:
             if val is not None and (type(val) is not int or val < 1):
                 raise MvpError('invalid_model_limit')
             self.limits[key] = val  # null/omitted: no operation-count limit.
-        for key, default, upper in (("request_timeout", 600, 3600), ("max_output_tokens", 8192, 32768)):
+        for key, default, upper in (("request_timeout", 600, 3600), ("max_output_tokens", 8192, 32768),
+                                    ("recovery_max_output_tokens", 32768, 32768)):
             val = data.get(key, default)
             if type(val) is not int or not 1 <= val <= upper:
                 raise MvpError("invalid_model_limit")
             self.limits[key] = val
+        if self.limits['recovery_max_output_tokens'] < self.limits['max_output_tokens']:
+            raise MvpError('invalid_model_limit')
         for name, provider in self.providers.items():
             if not NAME.fullmatch(name) or name == "codex":
                 raise MvpError("invalid_provider_name")
@@ -98,18 +102,21 @@ class ModelClient:
         self.registry = registry
         self.opener = opener or build_opener(NoRedirect())
 
-    def call(self, chosen, history, tools=(), *, timeout=None):
+    def call(self, chosen, history, tools=(), *, timeout=None, max_output_tokens=None):
         provider = self.registry.resolve(chosen)
         key = os.environ.get(provider["api_key_env"])
         if not key:
             raise MvpError("model_api_key_missing")
         responses = provider["wire_api"] == "responses"
         payload = {"model": chosen["model"], "stream": False}
+        output_limit = max_output_tokens if max_output_tokens is not None else self.registry.limits['max_output_tokens']
+        if type(output_limit) is not int or not 1 <= output_limit <= self.registry.limits['recovery_max_output_tokens']:
+            raise MvpError('invalid_model_limit')
         if responses:
             payload.update(input=history, store=False, include=["reasoning.encrypted_content"],
-                           max_output_tokens=self.registry.limits["max_output_tokens"])
+                           max_output_tokens=output_limit)
         else:
-            payload.update(messages=history, max_tokens=self.registry.limits["max_output_tokens"])
+            payload.update(messages=history, max_tokens=output_limit)
         mapped = provider["effort_map"][chosen["effort"]]
         if mapped is not None:
             obj = payload
@@ -143,23 +150,41 @@ class ModelClient:
         if not isinstance(data, dict) or data.get("error"):
             raise MvpError("invalid_model_response")
         if responses:
-            if data.get("status") != "completed" or not isinstance(data.get("output"), list):
+            if not isinstance(data.get("output"), list):
                 raise MvpError("incomplete_model_response")
             items = data["output"]
             if any(not isinstance(i, dict) for i in items):
                 raise MvpError("invalid_model_response")
+            for item in items:
+                if item.get('type') == 'message':
+                    content_items = item.get('content', [])
+                    if not isinstance(content_items, list) or any(not isinstance(c, dict) or (
+                            c.get('type') == 'output_text' and not isinstance(c.get('text'), str)) for c in content_items):
+                        raise MvpError('invalid_model_response')
             calls = [{"id": i.get("call_id"), "name": i.get("name"), "arguments": i.get("arguments")}
                      for i in items if i.get("type") == "function_call"]
             content = "\n".join(c.get("text", "") for i in items if i.get("type") == "message"
                                 for c in i.get("content", []) if c.get("type") == "output_text")
+            if data.get('status') != 'completed' or any(i.get('status') in {'in_progress', 'incomplete'} for i in items):
+                details = data.get('incomplete_details') or {}
+                reason = details.get('reason') if isinstance(details, dict) else None
+                if reason == 'content_filter':
+                    raise MvpError('model_content_filtered')
+                return partial_response(content, 'output_limit' if reason == 'max_output_tokens' else 'incomplete_status', 'responses')
             if any(not isinstance(c["id"], str) or not isinstance(c["name"], str) or not isinstance(c["arguments"], str) for c in calls):
                 raise MvpError("invalid_model_tool_call")
             return {"text": content, "calls": calls, "history": items, "wire_api": "responses"}
         try:
             first = data["choices"][0]
             message = first["message"]
+            if message.get('role') != 'assistant' or (message.get('content') is not None and not isinstance(message['content'], str)):
+                raise ValueError()
+            if first.get('finish_reason') == 'content_filter':
+                raise MvpError('model_content_filtered')
             if first.get("finish_reason") not in {"stop", "tool_calls"}:
-                raise MvpError("incomplete_model_response")
+                reason = 'output_limit' if first.get('finish_reason') == 'length' else (
+                    'missing_finish_reason' if first.get('finish_reason') is None else 'unexpected_finish_reason')
+                return partial_response(message.get('content') or '', reason, 'chat_completions')
             calls = [{"id": c["id"], "name": c["function"]["name"], "arguments": c["function"]["arguments"]}
                      for c in message.get("tool_calls", [])]
             # Do not persist provider-specific reasoning text in local replay history.
@@ -167,8 +192,15 @@ class ModelClient:
             if replay.get("role") != "assistant" or (message.get("content") is not None and not isinstance(message["content"], str)):
                 raise ValueError()
             return {"text": message.get("content") or "", "calls": calls, "history": [replay], "wire_api": "chat_completions"}
-        except (KeyError, IndexError, TypeError, ValueError):
+        except (KeyError, IndexError, TypeError, ValueError, AttributeError):
             raise MvpError("invalid_model_response") from None
+
+
+def partial_response(content, reason, wire):
+    # Never replay or execute tool calls from an incomplete response, even if a fragment parses.
+    history = ([{'type': 'message', 'role': 'assistant', 'content': [{'type': 'output_text', 'text': content}]}]
+               if wire == 'responses' else [{'role': 'assistant', 'content': content}]) if content else []
+    return {'text': content, 'calls': [], 'history': history, 'wire_api': wire, 'incomplete_reason': reason}
 
 
 def tool_result(wire, call_id, value):
@@ -197,11 +229,22 @@ class Collaboration:
             raise MvpError("collaboration_call_limit")
         self.calls += 1
         chosen = self.options["collaborators"][index]
-        result = self.client.call(chosen, [{"role": "user", "content": prompt}], timeout=timeout)
-        if result["calls"] or not result["text"].strip():
-            raise MvpError("invalid_consultation_response")
-        self.record("model_consulted", {**chosen, "index": index})
-        return {"model": chosen["model"], "text": result["text"][:24000]}
+        history = [{"role": "user", "content": prompt}]
+        deadline = time.monotonic() + min(timeout if timeout is not None else self.registry.limits['request_timeout'],
+                                          self.registry.limits['request_timeout'])
+        recovery = ResponseRecovery(self.registry, self.record)
+        turns = 0
+        limit = self.registry.limits['max_turns']
+        while limit is None or turns < limit:
+            turns += 1
+            result = recovery.call(self.client, chosen, history, (), deadline)
+            if recovery.continue_response(result, history, deadline):
+                continue
+            if result['calls']:
+                raise MvpError('invalid_consultation_response')
+            self.record("model_consulted", {**chosen, "index": index})
+            return {"model": chosen["model"], "text": result["text"][:24000]}
+        raise MvpError('model_turn_limit')
 
     def respond(self, prompt):
         prompt = text(prompt, 24000, "invalid_prompt")
@@ -211,9 +254,12 @@ class Collaboration:
         tools = [CONSULT_TOOL] if self.options["mode"] == "gpt-led" else []
         turns = 0
         limit = self.registry.limits['max_turns']
+        recovery = ResponseRecovery(self.registry, self.record)
         while limit is None or turns < limit:
             turns += 1
-            result = self.client.call(self.options["primary"], history, tools, timeout=deadline-time.monotonic())
+            result = recovery.call(self.client, self.options["primary"], history, tools, deadline)
+            if recovery.continue_response(result, history, deadline):
+                continue
             history.extend(result["history"])
             if not result["calls"]:
                 if not result["text"].strip():

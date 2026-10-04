@@ -116,6 +116,8 @@ const stages: Record<string, string> = {
   api_file_tool: 'API 模型操作文件',
   api_model_request: '正在等待模型回复',
   api_model_response: '已收到模型回复',
+  api_response_recovery: '正在保留上下文续写',
+  api_session_recovered: '已找回失败任务的对话上下文',
   model_consulted: 'GPT 已向协作模型提问',
 };
 const time = (value: string | null) =>

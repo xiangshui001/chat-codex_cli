@@ -98,6 +98,13 @@ def activity(row):
             budget = f'（第 {turn}/{limit} 轮）'
     if row['kind'] in {'api_model_request', 'api_model_response'}:
         result['label'] = ('正在等待模型回复' if row['kind'] == 'api_model_request' else '已收到模型回复') + budget
+    elif row['kind'] == 'api_response_recovery':
+        reasons = {'output_limit': '单次输出被截断', 'empty_model_response': '回复为空',
+                   'missing_finish_reason': '缺少结束标记', 'incomplete_status': '回复状态未完成',
+                   'model_request_timeout': '请求等待超时', 'model_transport_failed': '连接中断'}
+        result['label'] = '正在保留上下文续写 · ' + reasons.get(detail.get('reason'), '回复不完整')
+        if type(detail.get('output_tokens')) is int:
+            result['label'] += f" · 单次输出预算 {detail['output_tokens']}"
     elif row['kind'] == 'api_file_tool':
         name = {'read_file': '读取文件', 'list_files': '查看文件列表', 'write_file': '写入文件', 'delete_file': '删除文件'}.get(detail.get('name'), '文件工具')
         result['label'] = name + ('失败' if detail.get('ok') is False else '') + budget

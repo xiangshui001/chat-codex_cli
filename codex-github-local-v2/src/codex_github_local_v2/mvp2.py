@@ -490,6 +490,7 @@ def main(argv=None):
     mode.add_argument("--once", action="store_true")
     mode.add_argument("--list-repos", action="store_true")
     mode.add_argument("--migrate-state", action="store_true", help="Explicitly migrate idle MVP-2 engine state from schema 3 to 4")
+    mode.add_argument('--recover-api-session', metavar='REQUEST_ID', help='Explicitly register retained context from one failed API task; does not execute it')
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     if os.name != "posix":
@@ -523,6 +524,12 @@ def main(argv=None):
             store = DesktopStore(config.state_dir / "mvp2.sqlite3")
             poller = None
             try:
+                if args.recover_api_session:
+                    from .api_sessions import recover_api_session
+                    self_owner = github.identity()
+                    store.bind(config, self_owner)
+                    print(json.dumps({'session_id': recover_api_session(store, config, registry, args.recover_api_session)}))
+                    return 0
                 poller = DesktopPoller(config, store, github, registry)
                 while True:
                     try:

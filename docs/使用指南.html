@@ -129,6 +129,8 @@ set +a
 <ol><li>从上一轮 Issue 完成回执复制 <code>session_id</code>，或点开工作台任务查看会话 ID。</li><li>下一轮使用<strong>同一个目标仓库和本机执行端</strong>。在第 03 节选择“继续旧对话”，粘贴完整 UUID。</li><li>新任务仍可选择型号与强度。GPT CLI 对话使用 codex；其它 API 对话继续使用原来的 provider。</li><li>发布新的 Issue、新的 request_id，完成后检查回执中的会话 ID。</li></ol>
 <div class="grid2"><div class="card"><h4>保留下来：对话里的讨论</h4><p>前面说过的需求、分析与上下文可以继续使用。续接从上轮回执中的明确会话 ID 读取本机上下文。</p></div><div class="card"><h4>本轮代码：从当前默认分支开始</h4><p>每次任务使用独立克隆。需要基于旧改动继续做时，先审查并合并旧 PR，再发布新任务；未合并文件不会自动带入。</p></div></div>
 <div class="note blue">这里的 ID 是<strong>执行端 Codex CLI 或 API 执行器的对话 ID</strong>，直接来源是任务回执和工作台。当前 Chat 页面的聊天不会自动成为执行端会话。</div>
+<p>API 回复被截断、缺少完成标记或为空时，执行器保留上下文并请求继续，工作台显示恢复原因。截断的工具指令不会执行；单次输出预算可逐步增至 <code>recovery_max_output_tokens</code>（默认 32768）。仍受任务总时限和上下文容量约束。</p>
+<p class="small">已失败的 API 任务：明确要求恢复后，停止监听器并运行 <code>codex-github-local-v2 --config /ABS/PRIVATE/config.json --recover-api-session 原任务UUID</code>，取得会话 ID，再以当前基线和新任务 UUID 发布续接。该命令只找回上下文，不重放旧任务，旧授权和记录保留。</p>
 <details><summary>已有更早的 Codex CLI 对话可以导入吗？</summary><p>可以，但 UUID 对应会话文件必须存在于运行监听器的系统用户的 Codex 会话目录，而且原工作目录的 Git origin 要与本次目标仓库一致。找不到或来源不匹配时拒绝续接。</p><p class="small">会话必须属于实际运行监听器的同一系统用户。仅存在于其它用户、其它电脑或 Windows 端的历史文件，需要先核对执行端是否能识别，不能只凭页面显示的 ID 假定可用。</p></details>
 </section>
 <section id="models"><div class="section-head"><span class="number">05</span><div><h2>接入自己的其它模型</h2><p>只用 GPT CLI 可以保留空 providers；其它 API 和 GPT 主导需要登记模型。</p></div></div>

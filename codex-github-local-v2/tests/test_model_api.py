@@ -132,10 +132,11 @@ class ModelApiTests(ApiFixture):
         self.assertEqual(self.requests[0][1]['reasoning'], {'effort': 'deep'})
         self.assertNotIn('reasoning', self.requests[1][1])
 
-    def test_truncated_model_response_fails(self):
+    def test_truncated_model_response_is_marked_for_continuation(self):
         self.queue = [chat('partial', finish='length')]
-        with self.assertRaisesRegex(MvpError, 'incomplete'):
-            ModelClient(self.registry).call(self.other, [{'role': 'user', 'content': 'q'}])
+        result = ModelClient(self.registry).call(self.other, [{'role': 'user', 'content': 'q'}])
+        self.assertEqual(result['incomplete_reason'], 'output_limit')
+        self.assertEqual(result['calls'], [])
 
     def test_request_timeout_is_distinguished_without_leaking_transport_detail(self):
         client = ModelClient(self.registry)
