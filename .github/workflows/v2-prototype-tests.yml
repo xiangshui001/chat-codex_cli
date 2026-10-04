@@ -6,6 +6,7 @@ on:
       - prototype/orchestrator-v2
       - integration/**
       - feature/v2-mvp0-issue-to-codex
+      - feature/v2-mvp1-account-repositories
     paths:
       - 'codex-github-local-v2/**'
       - 'docs/V2架构草案.md'
@@ -48,3 +49,4 @@ jobs:
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2" validate "$V2_EXAMPLE"
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-control" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp0" --help
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp1" --help

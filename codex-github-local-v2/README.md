@@ -1,5 +1,7 @@
 # codex-github-local-v2 prototype
 
+MVP-1 增加账号内仓库自动发现和授权后按需克隆，所有仓库串行执行。独立入口 `codex-github-local-v2-mvp1`，见 [V2-MVP1](../docs/V2-MVP1.md) 与 [验证记录](../docs/MVP1_RESULT.md)。
+
 MVP-0 提供独立入口 `codex-github-local-v2-mvp0`：单仓库 Issue → SQLite 去重 → 本机 Codex CLI → Issue 回执。用法和限制见 [V2-MVP](../docs/V2-MVP.md)，本轮环境与验证记录见 [MVP0_RESULT](../docs/MVP0_RESULT.md)。它不使用完整 V2 控制器或前端。
 
 下一阶段实施入口：[V2 远程指挥与本机工作台设计](../docs/V2设计方案.md) 及 [实施验收清单](../docs/V2实施验收.md)。新的协议、事务状态库和完整执行链尚未实现，以下仍是当前原型的实际能力。

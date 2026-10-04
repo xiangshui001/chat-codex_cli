@@ -1,0 +1,8 @@
+{
+  "owner": "OWNER",
+  "host_id": "my-host-mvp1",
+  "workspace_root": "/home/USER/codex-managed-workspaces",
+  "state_dir": "/home/USER/.local/state/chat-codex-mvp1",
+  "poll_seconds": 60,
+  "timeout_seconds": 900
+}

@@ -138,15 +138,16 @@ class Task:
     contract_hash: str
 
 
-def parse_task(issue: dict, comments: list[dict], config: Config) -> Task:
+def parse_task(issue: dict, comments: list[dict], config: Config, *,
+               title_prefix: str = TITLE_PREFIX, marker: str = MARKER) -> Task:
     if (not isinstance(issue, dict) or "pull_request" in issue or issue.get("state") != "open"
-            or not str(issue.get("title", "")).startswith(TITLE_PREFIX)):
+            or not str(issue.get("title", "")).startswith(title_prefix)):
         raise MvpError("not_mvp_issue")
     if str((issue.get("user") or {}).get("login", "")).lower() not in config.allowed_authors:
         raise MvpError("issue_author_not_allowed")
     positive_id(issue.get("id")); positive_id(issue.get("number"))
     authorized = [c for c in comments if isinstance(c.get("body"), str)
-                  and c["body"].splitlines() and c["body"].splitlines()[0] == MARKER]
+                  and c["body"].splitlines() and c["body"].splitlines()[0] == marker]
     if len(authorized) != 1:
         raise MvpError("exactly_one_authorization_required")
     comment = authorized[0]
@@ -189,20 +190,22 @@ def parse_task(issue: dict, comments: list[dict], config: Config) -> Task:
 
 
 class Store:
+    schema_version = 1
+
     def __init__(self, path: Path):
         path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(path, timeout=5, isolation_level=None)
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         version = self.db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (0, 1):
+        if version not in (0, self.schema_version):
             self.db.close()
             raise MvpError("unsupported_mvp_schema")
         if version == 0:
             if self.db.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchone():
                 self.db.close()
                 raise MvpError("nonempty_unversioned_database")
-            self.db.executescript("""
+            self.db.executescript(f"""
                 BEGIN IMMEDIATE;
                 CREATE TABLE tasks (
                     id INTEGER PRIMARY KEY, repository_id INTEGER NOT NULL, issue_id INTEGER NOT NULL,
@@ -221,7 +224,7 @@ class Store:
                     id INTEGER PRIMARY KEY, task_id INTEGER NOT NULL REFERENCES tasks(id),
                     kind TEXT NOT NULL, at TEXT NOT NULL, detail TEXT NOT NULL
                 );
-                PRAGMA user_version=1;
+                PRAGMA user_version={self.schema_version};
                 COMMIT;
             """)
         self.db.execute("PRAGMA journal_mode=WAL")
@@ -300,6 +303,8 @@ class Store:
 
 class GitHub:
     """gh supplies the existing login. Direct paginated REST lists, never search."""
+    title_prefix = TITLE_PREFIX
+
     def __init__(self, repo: str, command: tuple[str, ...] = ("gh",)):
         self.repo, self.command = repo, command
         self.repository_id = None
@@ -346,7 +351,7 @@ class GitHub:
 
     def issues(self):
         return [i for i in self.pages(f"repos/{self.repo}/issues?state=open&sort=created&direction=asc")
-                if "pull_request" not in i and str(i.get("title", "")).startswith(TITLE_PREFIX)]
+                if "pull_request" not in i and str(i.get("title", "")).startswith(self.title_prefix)]
 
     def comments(self, number: int):
         return self.pages(f"repos/{self.repo}/issues/{number}/comments")
@@ -425,9 +430,9 @@ class Workspace:
                 raise MvpError("write_scope_violation")
 
 
-def receipt(row) -> str:
-    return (f"<!-- codex-v2-mvp:{row['request_id']} -->\n"
-            f"MVP-0 status: **{row['state']}**\n\n"
+def receipt(row, *, label: str = "MVP-0", marker: str = "codex-v2-mvp") -> str:
+    return (f"<!-- {marker}:{row['request_id']} -->\n"
+            f"{label} status: **{row['state']}**\n\n"
             f"- request_id: `{row['request_id']}`\n"
             f"- claimed: {row['created_at']}\n"
             f"- started: {row['started_at'] or 'not_started'}\n"
@@ -435,10 +440,13 @@ def receipt(row) -> str:
             f"- exit code: {row['exit_code'] if row['exit_code'] is not None else 'not_available'}\n"
             f"- git diff nonempty (including untracked): { {None: 'unknown', 0: 'false', 1: 'true'}[row['diff_nonempty']] }\n"
             f"- reason: {row['error'] or 'none'}\n\n{row['summary']}\n\n"
-            "完整日志仅保存在本机。MVP-0 不提交代码、不创建 PR、不自动合并。")
+            f"完整日志仅保存在本机。{label} 不提交代码、不创建 PR、不自动合并。")
 
 
 class Poller:
+    receipt_label = "MVP-0"
+    receipt_marker = "codex-v2-mvp"
+
     def __init__(self, config: Config, store: Store, github: GitHub, runner: CodexRunner,
                  workspace: Workspace | None = None):
         self.config, self.store, self.github, self.runner = config, store, github, runner
@@ -446,7 +454,8 @@ class Poller:
 
     def send_receipt(self, row):
         try:
-            comment_id = self.github.post_receipt(row["issue_number"], receipt(row))
+            comment_id = self.github.post_receipt(row["issue_number"], receipt(
+                row, label=self.receipt_label, marker=self.receipt_marker))
             self.store.receipt_sent(row["id"], comment_id)
         except MvpError as exc:
             LOG.error("receipt_pending issue=%s code=%s", row["issue_number"], exc)
