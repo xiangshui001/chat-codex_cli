@@ -76,12 +76,16 @@ class DesktopConfig(AccountConfig):
     hub_repo: str = ""
     models_file: Path | None = None
     config_file: Path | None = None
+    max_parallel_tasks: int = 1
 
     @classmethod
     def load(cls, path: Path):
         data = read_json(path.read_text(encoding="utf-8"))
         fields(data, {"owner", "host_id", "workspace_root", "state_dir", "hub_repo", "models_file"},
-               {"poll_seconds", "timeout_seconds"})
+               {"poll_seconds", "timeout_seconds", "max_parallel_tasks"})
+        parallel = data.get("max_parallel_tasks", 1)
+        if type(parallel) is not int or not 1 <= parallel <= 16:
+            raise MvpError("invalid_max_parallel_tasks")
         # Reuse the established path/owner validation without loosening MVP-1.
         account_keys = {"owner", "host_id", "workspace_root", "state_dir", "poll_seconds", "timeout_seconds"}
         import tempfile
@@ -101,7 +105,8 @@ class DesktopConfig(AccountConfig):
         models = models.resolve()
         if models.is_relative_to(account.workspace_root):
             raise MvpError("models_file_must_be_outside_workspaces")
-        return cls(**account.__dict__, hub_repo=hub.lower(), models_file=models, config_file=path.resolve())
+        return cls(**account.__dict__, hub_repo=hub.lower(), models_file=models, config_file=path.resolve(),
+                   max_parallel_tasks=parallel)
 
 
 @dataclass(frozen=True)

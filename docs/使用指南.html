@@ -54,7 +54,7 @@ config = {
     &quot;workspace_root&quot;: str(root / &quot;workspaces&quot;),
     &quot;state_dir&quot;: str(root / &quot;state&quot;),
     &quot;models_file&quot;: str(root / &quot;models.json&quot;),
-    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 3600
+    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 3600, &quot;max_parallel_tasks&quot;: 3
 }
 files = {
     &quot;config.json&quot;: json.dumps(config, ensure_ascii=False, indent=2) + &quot;\n&quot;,
@@ -87,6 +87,8 @@ set +a
 <div class="note blue"><strong>记录仓库可自行选择。</strong>初始配置使用“你的账号/codex-cli”。要从它派单，先建立该仓库并开启 Issues；也可改为本人已有的记录仓库。仅从目标仓库派单时无需建立记录仓库。</div>
 <ol><li>安装成功后，在第 03 节填写本机配置中的 owner 和 host_id，选择工作仓库、允许修改路径、对话和模型。</li><li>复制生成的指令给连接 GitHub 的 Chat，或自行生成授权评论。发布后保留 Issue 链接。</li><li>查看工作台任务详情与原 Issue 回执，取得本地目录、session_id 和草稿 PR。审查文件后再合并 PR。</li></ol>
 <p class="small">监听器、工作台和可选 HTTP API 是独立进程。项目不自动安装开机服务；需要持续运行时，可在一次小任务验证通过后交给自己的进程管理器。电脑、WSL 或进程停止时不会继续执行。</p>
+<div class="note blue"><strong>同时执行多个任务：</strong>本机 config.json 的 <code>max_parallel_tasks</code> 控制并发数量，新安装示例为 3，允许 1–16；省略时为 1。每个任务使用独立执行进程、目录与分支；同一旧对话依次执行。名额满时其余 Issue 留在 GitHub，下一轮检查自动领取。工作台顶部展示全部当前任务及各自的最近活动。失败任务和无效授权不会自动重跑。</div>
+<p class="small">已有 schema 3 安装：等待当前任务完成，停止监听器，安装新代码后执行 <code>codex-github-local-v2 --config /ABS/PRIVATE/config.json --migrate-state</code>，再在私有配置加入 <code>"max_parallel_tasks": 3</code> 并重新启动。迁移命令先备份数据库，升级至 schema 4，保留旧任务与对话；运行中的任务不能迁移。</p>
 </section>
 <section id="builder">
 <div class="section-head"><span class="number">03</span><div><h2>生成可以直接发给 Chat 的指令</h2><p>填写下面信息，复制给连接了 GitHub 的 Chat。这里不会自行发布 Issue。</p></div></div>

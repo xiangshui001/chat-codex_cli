@@ -1,6 +1,6 @@
 # 当前协议：指定对话、模型协作、机器路由与 PR
 
-V2 **0.1.0（MVP-2）** 是 main 的当前版本。默认命令 `codex-github-local-v2`，`codex-github-local-v2-mvp2` 为同一入口的兼容别名。旧源码和阶段说明已归档到 history。首次部署见[安装说明](安装说明.md)和[HTML 指南](使用指南.html)。新协议为 `[codex-v2-mvp2]` 和 `/codex-v2-mvp2 run`，新数据库为 schema 3 的 `mvp2.sqlite3`。旧数据库不导入、覆盖或自动重放；升级采用新虚拟环境、新状态目录和新工作区根目录。
+V2 **0.1.0（MVP-2）** 是 main 的当前版本。默认命令 `codex-github-local-v2`，`codex-github-local-v2-mvp2` 为同一入口的兼容别名。旧源码和阶段说明已归档到 history。首次部署见[安装说明](安装说明.md)和[HTML 指南](使用指南.html)。新协议为 `[codex-v2-mvp2]` 和 `/codex-v2-mvp2 run`，当前执行数据库为 schema 4 的 `mvp2.sqlite3`。schema 3 可显式原地迁移；其它旧协议数据库不导入、覆盖或自动重放。
 
 ## 安装与账号监听
 
@@ -13,7 +13,23 @@ python3 -m venv /ABS/PRIVATE/mvp2-venv
 /ABS/PRIVATE/mvp2-venv/bin/codex-github-local-v2 --config /ABS/PRIVATE/config.json
 ```
 
-配置 `owner` 为本人账号，各电脑使用唯一 `host_id`，例如 **desktop**、**laptop**；任务必须精确匹配它。每轮完整分页扫描凭据可见的本人仓库；排除组织、协作者、归档、禁用或未开启 Issues 的仓库。新仓库无需登记，先有初始提交即可。所有仓库共用串行队列。GitHub 连接与执行端 gh 的授权分别配置，程序不自动提升权限。
+配置 `owner` 为本人账号，各电脑使用唯一 `host_id`，例如 **desktop**、**laptop**；任务必须精确匹配它。每轮完整分页扫描凭据可见的本人仓库；排除组织、协作者、归档、禁用或未开启 Issues 的仓库。新仓库无需登记，先有初始提交即可。所有仓库共用本机并发名额。GitHub 连接与执行端 gh 的授权分别配置，程序不自动提升权限。
+
+## 并发配置与升级
+
+在私有 config.json 设置 `"max_parallel_tasks": 3`，允许 1–16 的整数；省略时为 1，保留已有串行行为。新安装示例设为 3。它只限制同时执行的任务数，不限制一个任务内的模型操作次数。重启监听器后生效。名额满时其余 Issue 留在 GitHub，下一轮自动检查；无效参数和已失败任务不会自动重跑。
+
+同一个旧会话一次只能运行一个任务，避免上下文覆盖；同一仓库的不同对话可在独立克隆与分支中并行。监听器持续扫描，工作台列出所有正在执行的任务、型号和最近活动。并发可能提高模型服务负载，遇到上游限流不会自动重发付费请求。
+
+已有 schema 3 用户：先等待当前任务完成，停止监听器；保留原配置、状态和成果目录，在已安装新代码的环境中执行：
+
+```bash
+codex-github-local-v2 --config /ABS/PRIVATE/config.json --migrate-state
+```
+
+该命令持有控制器锁，先备份 SQLite，再将执行数据库升级至 schema 4；拒绝迁移未结束的任务，不修改原任务、授权或会话记录。桥接核心数据库不迁移。旧程序不支持 schema 4，回退代码时应保留新状态并使用升级前备份，不能把新运行记录自动重放到旧库。新版工作台只读兼容 schema 3 和 4。
+
+worker 意外退出后，已完成且提交结果确定的任务只补做发布；执行/进程清理或 commit 不确定时暂停新领取，现有正常 worker 可以完成，未知任务不自动重跑。
 
 `hub_repo` 是本机任务记录仓库，例如 `OWNER/codex-cli`。任务 Issue 可位于工作目标仓库，或 hub_repo；授权中的 `repo` 始终是**实际工作目标**。基线、克隆、commit 和 PR 针对目标仓库；回执返回原 Issue。其它本人仓库不能用来代发对第三个仓库的任务。
 

@@ -6,5 +6,6 @@
   "state_dir": "/home/USER/.local/state/chat-codex-mvp2",
   "models_file": "/home/USER/.config/chat-codex/models.json",
   "poll_seconds": 60,
-  "timeout_seconds": 3600
+  "timeout_seconds": 3600,
+  "max_parallel_tasks": 3
 }
