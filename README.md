@@ -39,6 +39,12 @@ python3 "$HOME/codex-tools/chat-codex_cli/codex-github-local/verify.py"
 
 ## 管理与证据
 
+- [MVP-1 账号内仓库自动接入](docs/V2-MVP1.md)：发现本人仓库、授权后创建独立工作区、跨仓库串行去重；[本电脑真实验证记录（codex-cli）](https://github.com/xiangshui001/codex-cli/blob/mvp1-records-20261004/docs/MVP1_SMOKE_2026-10-04.md)。
+- [V2 远程指挥与本机工作台设计](docs/V2设计方案.md)：单人、WSL 单主机、多仓库的正式实施设计；含协议、故障恢复与分阶段验收，尚未全部实现。
+- [MVP-0 本电脑 Ubuntu 真实验证记录](https://github.com/xiangshui001/codex-cli/blob/mvp0-smoke-20261004/docs/MVP0_SMOKE_2026-10-04.md)：Issue → Codex CLI → 回执及重复轮询已验证；记录保存在 codex-cli，台式机 WSL 尚未验证。
+- [integration 模块边界与吸收决策](docs/INTEGRATION.md)：0.1.0、v2、Harness 契约、React 和视觉组件的维护入口。
+- [本地 Harness 与迁移验证](docs/HARNESS_VALIDATION.md)：真实 HTTP/core 的隔离 smoke、前端环境与显式 ledger 迁移。
+- `codex-github-local-v2/` 是独立旁路原型；`web/app/` 是唯一活跃前端，提供显式 Mock 演示及本地 HTTP 验证入口。二者都尚未替换现役 0.1.0。
 - [验证范围](docs/VALIDATION.md)：明确离线测试、真实演示、GitHub PR 和未验证步骤。
 - [环境排查](docs/环境排查.md)：WSL 代理、沙箱审批、PATH 与依赖。
 - [修复历史](history/README.md)：可靠性修复、退出码补丁、桥接和交互文档。

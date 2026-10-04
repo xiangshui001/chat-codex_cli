@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "codex-github-local-v2"
+version = "0.0.5"
+description = "Side-by-side prototype for a policy-first ChatGPT to Codex local orchestrator"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.scripts]
+codex-github-local-v2 = "codex_github_local_v2.cli:main"
+codex-github-local-v2-control = "codex_github_local_v2.remote_control:main"
+codex-github-local-v2-mvp0 = "codex_github_local_v2.mvp0:main"
+codex-github-local-v2-mvp1 = "codex_github_local_v2.mvp1:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

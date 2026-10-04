@@ -1,0 +1,11 @@
+{
+  "host_id": "test-host",
+  "repo": "OWNER/SAFE-TEST-REPO",
+  "allowed_authors": ["OWNER"],
+  "workspace": "/home/USER/mvp0-test",
+  "workspace_allowlist": ["/home/USER/mvp0-test"],
+  "state_dir": "/home/USER/.local/state/chat-codex-mvp0",
+  "base_branch": "main",
+  "poll_seconds": 60,
+  "timeout_seconds": 900
+}
