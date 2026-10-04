@@ -5,6 +5,7 @@ on:
     branches:
       - prototype/orchestrator-v2
       - integration/**
+      - feature/v2-mvp0-issue-to-codex
     paths:
       - 'codex-github-local-v2/**'
       - 'docs/V2架构草案.md'
@@ -29,6 +30,10 @@ jobs:
           python-version: '3.11'
       - name: Run v2 unit tests
         run: python3 -m unittest discover -s codex-github-local-v2/tests -v
+      - name: Check unchanged V1 offline regression
+        run: |
+          python3 codex-github-local/verify.py
+          python3 -c 'import json; r=json.load(open("codex-github-local/validation/posix-offline-summary.json")); assert r["passed"] and r["tests_executed"] == 53 and r["skipped"] == 0, r'
       - name: Validate public examples
         run: |
           PYTHONPATH=codex-github-local-v2/src python3 -m codex_github_local_v2.cli validate codex-github-local-v2/examples/audit-readonly.json
@@ -42,3 +47,4 @@ jobs:
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2" --help
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2" validate "$V2_EXAMPLE"
           "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-control" --help
+          "$RUNNER_TEMP/v2-install/bin/codex-github-local-v2-mvp0" --help
