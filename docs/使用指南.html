@@ -54,7 +54,7 @@ config = {
     &quot;workspace_root&quot;: str(root / &quot;workspaces&quot;),
     &quot;state_dir&quot;: str(root / &quot;state&quot;),
     &quot;models_file&quot;: str(root / &quot;models.json&quot;),
-    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 900
+    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 3600
 }
 files = {
     &quot;config.json&quot;: json.dumps(config, ensure_ascii=False, indent=2) + &quot;\n&quot;,
@@ -149,9 +149,9 @@ set +a
       }
     }
   },
-  &quot;max_turns&quot;: 40,
-  &quot;max_calls&quot;: 8,
-  &quot;request_timeout&quot;: 120,
+  &quot;max_turns&quot;: null,
+  &quot;max_calls&quot;: null,
+  &quot;request_timeout&quot;: 600,
   &quot;max_output_tokens&quot;: 8192
 }</pre></div><div class="pathbox dark"><div class="codebar"><span>service.env · 本机填写，遵循 Bash 引号规则</span><button class="btn sm copy-btn" type="button" data-copy="other-env">复制</button></div><pre id="other-env">OTHER_MODEL_API_KEY=&#x27;在本机填真实密钥&#x27;
 # 保留已生成的 CODEX_COLLABORATION_TOKEN</pre></div>

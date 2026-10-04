@@ -125,6 +125,8 @@ const reasons: Record<string, string> = {
   provider_not_allowed: '模型服务商未登记或模式不匹配',
   model_api_key_missing: '本机模型密钥尚未配置',
   authorization_changed: '领取前授权内容发生变化',
+  edited_authorization: '授权评论被编辑，请发布新任务',
+  exactly_one_authorization_required: '需要唯一一条有效授权评论',
   authorization_not_found: '尚未找到有效授权评论',
   target_repository_not_visible: '本机无法访问目标仓库',
   api_session_not_found: '本机找不到要续接的 API 对话',
@@ -384,7 +386,7 @@ export function LiveWorkbench() {
               ))}
               <p className="live-muted">
                 这些 Issue
-                尚未启动，不计入正在执行。按登记值重新发布授权；已领取或失败任务请使用新的任务编号。
+                尚未启动，不计入正在执行。按登记值发布新的 Issue 和任务编号，原任务记录保留。
               </p>
               {monitor?.rejections_truncated && (
                 <p className="live-muted">仅显示前 50 项未领取原因。</p>

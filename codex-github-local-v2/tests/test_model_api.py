@@ -9,6 +9,7 @@ import tempfile
 import threading
 import unittest
 from unittest.mock import patch
+from urllib.error import URLError
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from codex_github_local_v2.collaboration_api import handler, serve_stdio
@@ -136,6 +137,31 @@ class ModelApiTests(ApiFixture):
         with self.assertRaisesRegex(MvpError, 'incomplete'):
             ModelClient(self.registry).call(self.other, [{'role': 'user', 'content': 'q'}])
 
+    def test_request_timeout_is_distinguished_without_leaking_transport_detail(self):
+        client = ModelClient(self.registry)
+        for error in [TimeoutError('private transport detail'), URLError(TimeoutError('private transport detail'))]:
+            with patch.object(client.opener, 'open', side_effect=error), self.assertRaisesRegex(MvpError, '^model_request_timeout$'):
+                client.call(self.other, [{'role': 'user', 'content': 'q'}])
+
+    def test_nullable_operation_budgets_and_positive_opt_in(self):
+        for limits in [{}, {'max_turns': None, 'max_calls': None}, {'max_turns': 1000, 'max_calls': 1000}]:
+            self.file.write_text(json.dumps({'providers': self.providers, **limits}))
+            registry = ModelRegistry(self.file)
+            self.assertEqual(registry.limits['max_turns'], limits.get('max_turns'))
+        for value in [0, -1, True, 1.5]:
+            self.file.write_text(json.dumps({'providers': self.providers, 'max_turns': value}))
+            with self.assertRaisesRegex(MvpError, 'invalid_model_limit'):
+                ModelRegistry(self.file)
+
+    def test_unlimited_collaboration_calls_can_exceed_old_limit(self):
+        self.file.write_text(json.dumps({'providers': self.providers, 'max_calls': None}))
+        registry = ModelRegistry(self.file)
+        self.queue = [chat('advice') for _ in range(40)]
+        bridge = Collaboration(registry, {'mode': 'gpt-led', 'primary': self.gpt, 'collaborators': [self.other]})
+        for _ in range(40):
+            bridge.consult(0, 'question')
+        self.assertEqual(bridge.calls, 40)
+
     def test_consultation_budget_and_no_arbitrary_provider(self):
         self.queue = [chat(), chat()]
         bridge = Collaboration(self.registry, {'mode': 'gpt-led', 'primary': self.gpt, 'collaborators': [self.other]})
@@ -216,11 +242,15 @@ class ModelApiTests(ApiFixture):
         task = DesktopTask('6c9134d1-f6ae-49f3-bdfd-e3681c19e183', 'desktop', 'owner/project', 'a'*40,
                            'Review repository', ('docs/report.md',), 1, 'hash', {'mode': 'new'},
                            {'mode': 'api', 'primary': self.other})
-        self.queue = [chat(None, [function('read_file', {'path': 'source.txt'}, str(i))]) for i in range(13)]
-        self.queue += [chat(None, [function('write_file', {'path': 'docs/report.md', 'content': 'Evidence-based report'})]), chat('Done')]
+        self.queue = [chat(None, [function('read_file', {'path': 'source.txt'}, str(i))]) for i in range(60)]
+        batch = [function('read_file', {'path': 'source.txt'}, 'batch-' + str(i)) for i in range(19)]
+        batch += [function('write_file', {'path': 'docs/report.md', 'content': 'Evidence-based report'}, 'write-final')]
+        self.queue += [chat(None, batch), chat('Done')]
         result, _, _ = ApiFileRunner(registry).run_task(task, workspace, self.root/'run', 10, lambda *_: None)
         self.assertIsNone(result.error)
         self.assertEqual((workspace/'docs/report.md').read_text(), 'Evidence-based report')
+        self.assertEqual(len(self.requests), 62)
+        self.assertFalse(any('responses remain' in (m.get('content') or '') for m in self.requests[-1][1]['messages']))
 
     def test_budget_reminder_and_failure_diagnostics_without_resume(self):
         workspace = self.root / 'project'; workspace.mkdir()

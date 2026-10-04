@@ -190,14 +190,14 @@ class ApiFileRunner:
         turns_used = 0
         max_turns = self.registry.limits["max_turns"]
         try:
-            for turn in range(max_turns):
-                remaining = max_turns - turn
-                if remaining <= 3:
+            while max_turns is None or turns_used < max_turns:
+                remaining = max_turns - turns_used if max_turns is not None else None
+                if remaining is not None and remaining <= 3:
                     history.append({"role": "system", "content":
                         f"Only {remaining} model responses remain, including this one. "
                         "Finish required artifact writes now, then give your final answer without tool calls. "
                         "Prioritize delivery over further exploration; disclose incomplete coverage rather than invent findings."})
-                turns_used = turn + 1
+                turns_used += 1
                 record('api_model_request', {'turn': turns_used, 'max_turns': max_turns})
                 result = self.client.call(chosen, history, FILE_TOOLS, timeout=deadline-time.monotonic())
                 record('api_model_response', {'turn': turns_used, 'max_turns': max_turns})
@@ -210,8 +210,6 @@ class ApiFileRunner:
                     event("item.completed", item={"id": "final", "type": "agent_message", "text": result["text"]})
                     event("turn.completed")
                     return Execution(0, None), session_id, history
-                if len(result["calls"]) > 16:
-                    raise MvpError("file_tool_call_limit")
                 for call in result["calls"]:
                     if time.monotonic() >= deadline:
                         raise MvpError("execution_timeout")

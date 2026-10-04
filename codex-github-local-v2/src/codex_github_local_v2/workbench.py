@@ -90,7 +90,12 @@ def activity(row):
     if not isinstance(detail, dict):
         return result
     turn, limit = detail.get('turn'), detail.get('max_turns')
-    budget = f'（第 {turn}/{limit} 轮）' if type(turn) is int and type(limit) is int and 1 <= turn <= limit <= 50 else ''
+    budget = ''
+    if type(turn) is int and turn >= 1:
+        if limit is None:
+            budget = f'（第 {turn} 轮，无操作次数上限）'
+        elif type(limit) is int and limit >= turn:
+            budget = f'（第 {turn}/{limit} 轮）'
     if row['kind'] in {'api_model_request', 'api_model_response'}:
         result['label'] = ('正在等待模型回复' if row['kind'] == 'api_model_request' else '已收到模型回复') + budget
     elif row['kind'] == 'api_file_tool':
@@ -149,6 +154,15 @@ class Reader:
                      issue_url=f"https://github.com/{row['repo']}/issues/{row['issue_number']}")
         return value
 
+    def latest_activity(self, request_id, row):
+        result = activity(row) if row else None
+        path = self.config.state_dir / 'runs' / request_id / 'stdout.jsonl'
+        if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(self.config.state_dir.resolve()):
+            modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            if result is None or modified > datetime.fromisoformat(result['at']):
+                result = {'kind': 'execution_output', 'at': modified.isoformat(), 'label': '执行日志有更新'}
+        return result
+
     def overview(self):
         db = self.connect()
         try:
@@ -159,7 +173,7 @@ class Reader:
                 if task['state'] in {'running', 'queued'}:
                     row = db.execute('SELECT kind,at,detail FROM events WHERE task_id=(SELECT id FROM tasks WHERE request_id=?) ORDER BY id DESC LIMIT 1',
                                      (task['request_id'],)).fetchone()
-                    task['activity'] = activity(row) if row else None
+                    task['activity'] = self.latest_activity(task['request_id'], row)
         finally:
             db.close()
         return {'source': self.source, 'observed_at': datetime.now(timezone.utc).isoformat(),
@@ -180,7 +194,7 @@ class Reader:
                           events=[activity(r) for r in db.execute(
                               'SELECT kind,at,detail FROM events WHERE task_id=? ORDER BY id LIMIT 500', (row['id'],))])
             recent = db.execute('SELECT kind,at,detail FROM events WHERE task_id=? ORDER BY id DESC LIMIT 1', (row['id'],)).fetchone()
-            result['activity'] = activity(recent) if recent else None
+            result['activity'] = self.latest_activity(request_id, recent)
             repository_id = row['target_id'] if self.schema_version == 3 else row['repository_id']
             diff_base = row['base_sha'] if self.schema_version == 3 else 'HEAD'
         finally:

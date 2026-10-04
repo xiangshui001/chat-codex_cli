@@ -90,9 +90,9 @@ GPT CLI 使用既有登录，不需要 OpenAI API key。HTTP 的 GPT 模式需�
 
 ### API 仓库任务的轮数
 
-models.json 的 max_turns 默认 40，允许 1–50；它计数模型回复，不是读取文件次数，也不由思考强度决定。最后三轮会提示模型先写交付文件、再结束回复。整仓审查应在报告中明确实际覆盖范围，未检查的部分不能声称已审查。仍受总执行时限和上下文大小限制，增加轮数可能增加调用费用。
+models.json 的 max_turns 和 max_calls 默认 null，表示不设模型回复轮数和协作调用次数上限；API 文件工具也不设每轮操作次数上限。模型可以继续探索并写出交付物。需要自行设预算时可配置正整数，有限轮数下最后三轮会提醒交付。整仓审查应在报告中明确实际覆盖范围，未检查的部分不能声称已审查。仍受总执行时限和上下文大小限制。默认单次请求超时为 600 秒，可配置至 3600 秒；超时报告 model_request_timeout，不自动重试付费请求。
 
-已有配置中的显式 max_turns 不会被升级覆盖，需本机调整后重启监听器和模型 API；已领取任务的冻结配置保持原样。耗尽轮数仍报告 model_turn_limit，不将未完成任务当作成功。失败任务保留受大小限制的私有 context.json 和轮数诊断，不登记为可恢复会话、不自动重跑。核对后可用新的 request_id 和当前 main 基线发布新任务。
+已有配置中的显式 max_turns / max_calls 不会被升级覆盖，取消次数限制需本机设为 null，再重启监听器和模型 API；已领取任务的冻结配置保持原样。有限预算耗尽仍报告 model_turn_limit，不将未完成任务当作成功。失败任务保留受大小限制的私有 context.json 和轮数诊断，不登记为可恢复会话、不自动重跑。核对后可用新的 request_id 和当前 main 基线发布新任务。
 
 ```bash
 export CODEX_COLLABORATION_TOKEN='<至少 32 个 ASCII 字符的随机本机令牌>'
@@ -109,7 +109,7 @@ export CODEX_COLLABORATION_TOKEN='<至少 32 个 ASCII 字符的随机本机令�
 | `GET /v1/models` | 本机登记的 provider、型号和 effort；不返回密钥或地址 |
 | `POST /v1/respond` | JSON `{ "prompt": "...", "models": {...} }`，返回 mode、model、text 和 collaboration_calls |
 
-HTTP 模式使用 provider ID；GPT 模式 primary 选本机登记的 `kind: gpt` provider（例如 `openai`），不是 `codex`。`gpt-led` 时 GPT 经 Responses function calling 决定调用外部模型，再综合最终答案；`api` 时只调用其它模型。接口是文本协作服务，**不会修改工作目录或发布 GitHub 任务**。要执行仓库工作，使用上述 Issue 协议。请求大小、模型返回体、轮数、输出 token 和调用时限均有限制，截断或未完成的模型结果不当作成功。
+HTTP 模式使用 provider ID；GPT 模式 primary 选本机登记的 `kind: gpt` provider（例如 `openai`），不是 `codex`。`gpt-led` 时 GPT 经 Responses function calling 决定调用外部模型，再综合最终答案；`api` 时只调用其它模型。接口是文本协作服务，**不会修改工作目录或发布 GitHub 任务**。要执行仓库工作，使用上述 Issue 协议。请求大小、模型返回体、输出 token 和调用时限有限制；轮数和协作调用次数可自行配置预算，默认不设次数限制。截断或未完成的模型结果不当作成功。
 
 ## 本地成果、PR 与恢复
 

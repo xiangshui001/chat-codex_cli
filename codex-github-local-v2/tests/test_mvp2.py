@@ -5,6 +5,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import Mock, patch
 import uuid
@@ -239,6 +240,16 @@ class PollerTests(Fixture):
         detail = reader.detail(RID)
         self.assertIn('source.py', detail['activity']['label'])
         self.assertNotIn('private file', json.dumps(detail))
+        evidence = self.config.state_dir / 'runs' / RID
+        evidence.mkdir(parents=True)
+        (evidence / 'stdout.jsonl').write_text('{"type":"item.completed","item":{"type":"reasoning","text":"private reasoning"}}')
+        os.utime(evidence / 'stdout.jsonl', (time.time() + 2, time.time() + 2))
+        updated = reader.overview()
+        self.assertEqual(updated['tasks'][0]['activity']['label'], '执行日志有更新')
+        self.assertNotIn('private reasoning', json.dumps(updated))
+        os.utime(evidence / 'stdout.jsonl', (0, 0))
+        self.s.event(ident, 'api_model_request', {'turn': 65, 'max_turns': None})
+        self.assertEqual(reader.overview()['tasks'][0]['activity']['label'], '正在等待模型回复（第 65 轮，无操作次数上限）')
 
     def test_scope_failure_keeps_files_and_no_pr(self):
         self.ws.check_changes.side_effect = MvpError('write_scope_violation')
