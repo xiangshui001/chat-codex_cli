@@ -19,8 +19,8 @@
       "effort_map": {"low": "low", "medium": "medium", "high": "high"}
     }
   },
-  "max_turns": 12,
-  "max_calls": 8,
-  "request_timeout": 120,
+  "max_turns": null,
+  "max_calls": null,
+  "request_timeout": 600,
   "max_output_tokens": 8192
 }

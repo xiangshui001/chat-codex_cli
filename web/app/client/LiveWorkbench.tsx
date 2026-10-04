@@ -13,6 +13,28 @@ import './styles.css';
 import './live.css';
 
 type State = 'queued' | 'running' | 'succeeded' | 'failed' | 'stale_base';
+type ActivityInfo = { kind: string; at: string; label?: string };
+type Monitor = {
+  phase: 'starting' | 'checking' | 'idle' | 'executing' | 'publishing' | 'error' | 'blocked';
+  last_poll_started_at: string | null;
+  last_poll_finished_at: string | null;
+  next_poll_at: string | null;
+  repository_count: number;
+  checked_repositories: number;
+  error_count: number;
+  last_error: string | null;
+  rejections_truncated: boolean;
+  rejected: {
+    repo: string;
+    issue_number: number;
+    issue_url: string;
+    reason: string;
+    model?: string;
+    effort?: string;
+    suggested_model?: string;
+    allowed_efforts?: string[];
+  }[];
+};
 type Task = {
   request_id: string;
   repo: string;
@@ -35,6 +57,7 @@ type Task = {
   effort?: string;
   pr_url?: string | null;
   publication_state?: string;
+  activity?: ActivityInfo | null;
 };
 type Overview = {
   source: 'local-mvp1' | 'local-mvp2';
@@ -45,13 +68,14 @@ type Overview = {
   counts: Partial<Record<State, number>>;
   tasks: Task[];
   limit: number;
+  monitor?: Monitor | null;
 };
 type Detail = Task & {
   cwd: string | null;
   write_paths: string[];
   files: string[];
   files_error: string | null;
-  events: { kind: string; at: string }[];
+  events: ActivityInfo[];
   stderr: string;
   stderr_truncated: boolean;
   progress: {
@@ -89,10 +113,29 @@ const stages: Record<string, string> = {
   publication_updated: '更新 PR 发布进度',
   publication_pending: '等待补做 PR 发布',
   api_file_tool: 'API 模型操作文件',
+  api_model_request: '正在等待模型回复',
+  api_model_response: '已收到模型回复',
   model_consulted: 'GPT 已向协作模型提问',
 };
 const time = (value: string | null) =>
   value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未发生';
+const reasons: Record<string, string> = {
+  model_not_allowed: '模型名称未登记，名称和大小写必须与本机配置一致',
+  effort_not_supported: '思考强度未登记',
+  provider_not_allowed: '模型服务商未登记或模式不匹配',
+  model_api_key_missing: '本机模型密钥尚未配置',
+  authorization_changed: '领取前授权内容发生变化',
+  edited_authorization: '授权评论被编辑，请发布新任务',
+  exactly_one_authorization_required: '需要唯一一条有效授权评论',
+  authorization_not_found: '尚未找到有效授权评论',
+  target_repository_not_visible: '本机无法访问目标仓库',
+  api_session_not_found: '本机找不到要续接的 API 对话',
+  cli_session_not_found_on_this_host: '本机找不到要续接的 Codex 对话',
+};
+const elapsed = (value: string | null | undefined, now: number) => {
+  const seconds = value ? Math.max(0, Math.floor((now - Date.parse(value)) / 1000)) : 0;
+  return seconds < 60 ? `${seconds} 秒` : `${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+};
 async function request<T>(path: string): Promise<T> {
   const response = await fetch('/api/mvp1/' + path, {
     headers: { 'X-Chat-Codex-Local': '1' },
@@ -115,9 +158,12 @@ export function LiveWorkbench() {
   const [error, setError] = useState('');
   const [search, setSearch] = useState('');
   const [follow, setFollow] = useState(false);
+  const [now, setNow] = useState(Date.now());
   const output = useRef<HTMLDivElement>(null);
   useEffect(() => {
     document.title = '真实任务 · chat-codex';
+    const clock = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(clock);
   }, []);
   useEffect(() => {
     let stopped = false;
@@ -133,7 +179,11 @@ export function LiveWorkbench() {
           throw new Error('服务返回了不匹配的数据来源');
         if (stopped) return;
         setOverview(snapshot);
-        const id = selected || snapshot.tasks[0]?.request_id;
+        const id =
+          selected ||
+          snapshot.tasks.find((task) => task.state === 'running' || task.state === 'queued')
+            ?.request_id ||
+          snapshot.tasks[0]?.request_id;
         if (!selected && id) {
           setSelected(id);
           return;
@@ -169,6 +219,32 @@ export function LiveWorkbench() {
     window.history.replaceState(null, '', '#task/' + id);
   }
   const counts = overview?.counts ?? {};
+  const active = overview?.tasks.find(
+    (task) => task.state === 'running' || task.state === 'queued',
+  );
+  const monitor = overview?.monitor;
+  const rejected = monitor?.rejected ?? [];
+  const phaseLabel = !overview
+    ? '正在连接本机'
+    : overview.listener === 'stopped'
+      ? '监听已停止'
+      : monitor?.phase === 'blocked'
+        ? '接单已停止，需要核对未结束任务'
+        : active
+          ? active.state === 'queued'
+            ? '正在准备任务'
+            : '有任务正在处理'
+          : monitor?.phase === 'checking'
+            ? '正在检查 GitHub'
+            : monitor?.phase === 'error'
+              ? 'GitHub 检查遇到错误'
+              : rejected.length
+                ? '没有任务在执行，有 Issue 未通过领取检查'
+                : monitor
+                  ? '目前没有任务在执行，等待新任务'
+                  : overview.listener === 'unknown'
+                    ? '监听状态未知，尚无检查详情'
+                    : '监听进程运行中，尚无检查详情';
   return (
     <div className="live-workbench">
       <header className="live-top">
@@ -202,7 +278,7 @@ export function LiveWorkbench() {
                       : '监听状态未知'
                   : '读取本机记录…'}
               </span>
-              <small>最近读取：{overview ? time(overview.observed_at) : '等待连接'}</small>
+              <small>页面刷新：{overview ? time(overview.observed_at) : '等待连接'}</small>
             </div>
           </div>
         </section>
@@ -239,8 +315,84 @@ export function LiveWorkbench() {
           <div>
             <FileText />
             <span>需要查看</span>
-            <strong>{(counts.failed ?? 0) + (counts.stale_base ?? 0)}</strong>
+            <strong>{(counts.failed ?? 0) + (counts.stale_base ?? 0) + rejected.length}</strong>
           </div>
+        </section>
+        <section className="live-current" aria-label="当前运行状态" aria-live="polite">
+          <div className="live-current-head">
+            <Activity size={20} />
+            <div>
+              <h2>{phaseLabel}</h2>
+              {active && (
+                <p>
+                  Issue #{active.issue_number} · {active.repo} · {active.model ?? '模型准备中'}
+                  {active.started_at && ` · 已用 ${elapsed(active.started_at, now)}`}
+                </p>
+              )}
+              {active?.activity && (
+                <p>
+                  {active.activity.label ?? stages[active.activity.kind] ?? active.activity.kind}
+                  {' · 最近活动 '}
+                  {elapsed(active.activity.at, now)}前
+                </p>
+              )}
+            </div>
+            {active && <button onClick={() => select(active.request_id)}>查看当前任务</button>}
+          </div>
+          {monitor && (
+            <p className="live-monitor-time">
+              上次完成 GitHub 检查：{time(monitor.last_poll_finished_at)}
+              {' · '}
+              {monitor.phase === 'checking'
+                ? `本轮已检查 ${monitor.checked_repositories}/${monitor.repository_count} 个仓库`
+                : `监控 ${monitor.repository_count} 个仓库`}
+              {monitor.next_poll_at && !active && ` · 下次检查：${time(monitor.next_poll_at)}`}
+            </p>
+          )}
+          {!!monitor?.error_count && (
+            <p className="live-failure">
+              本轮有 {monitor.error_count} 项 GitHub 检查或回写错误，等待下次重试。
+            </p>
+          )}
+          {monitor?.last_error && <p className="live-failure">{monitor.last_error}</p>}
+          {!monitor && overview && (
+            <p className="live-muted">还没有本机检查记录。页面刷新时间仅表示读到了本机数据。</p>
+          )}
+          {rejected.length > 0 && (
+            <div className="live-unclaimed">
+              <h3>
+                未领取的 Issue <small>{rejected.length} 项</small>
+              </h3>
+              {rejected.map((issue) => (
+                <article key={`${issue.repo}/${issue.issue_number}`}>
+                  <a href={issue.issue_url} target="_blank" rel="noreferrer">
+                    #{issue.issue_number} · {issue.repo}
+                  </a>
+                  <p>{reasons[issue.reason] ?? `未通过领取检查（${issue.reason}）`}</p>
+                  {issue.model && (
+                    <p>
+                      请求：{issue.model} · 思考强度：{issue.effort}
+                    </p>
+                  )}
+                  {issue.suggested_model && (
+                    <p>
+                      登记的模型名：<code>{issue.suggested_model}</code>
+                    </p>
+                  )}
+                  {!!issue.allowed_efforts?.length && (
+                    <p>登记的思考强度：{issue.allowed_efforts.join('、')}</p>
+                  )}
+                </article>
+              ))}
+              <p className="live-muted">
+                这些 Issue
+                尚未启动，不计入正在执行。按登记值发布新的 Issue 和任务编号，原任务记录保留。
+              </p>
+              {monitor?.rejections_truncated && (
+                <p className="live-muted">仅显示前 50 项未领取原因。</p>
+              )}
+            </div>
+          )}
         </section>
         <div className="live-columns">
           <aside className="live-task-panel">
@@ -355,7 +507,7 @@ export function LiveWorkbench() {
                       {detail.events.map((event, index) => (
                         <li key={`${index}-${event.kind}`}>
                           <span className="live-step-dot" />
-                          <strong>{stages[event.kind] ?? event.kind}</strong>
+                          <strong>{event.label ?? stages[event.kind] ?? event.kind}</strong>
                           <time>{time(event.at)}</time>
                         </li>
                       ))}
@@ -452,8 +604,7 @@ export function LiveWorkbench() {
           </section>
         </div>
         <footer className="live-footer">
-          本机只读查看 · 每 3 秒自动刷新 · 数据来自 MVP-1 SQLite 与本机 Codex JSONL ·
-          只显示已领取任务
+          本机只读查看 · 每 3 秒自动刷新 · 数据来自本机任务记录、监听检查记录与执行日志
         </footer>
       </main>
     </div>

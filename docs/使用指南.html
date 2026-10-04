@@ -54,7 +54,7 @@ config = {
     &quot;workspace_root&quot;: str(root / &quot;workspaces&quot;),
     &quot;state_dir&quot;: str(root / &quot;state&quot;),
     &quot;models_file&quot;: str(root / &quot;models.json&quot;),
-    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 900
+    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 3600
 }
 files = {
     &quot;config.json&quot;: json.dumps(config, ensure_ascii=False, indent=2) + &quot;\n&quot;,
@@ -149,9 +149,9 @@ set +a
       }
     }
   },
-  &quot;max_turns&quot;: 12,
-  &quot;max_calls&quot;: 8,
-  &quot;request_timeout&quot;: 120,
+  &quot;max_turns&quot;: null,
+  &quot;max_calls&quot;: null,
+  &quot;request_timeout&quot;: 600,
   &quot;max_output_tokens&quot;: 8192
 }</pre></div><div class="pathbox dark"><div class="codebar"><span>service.env · 本机填写，遵循 Bash 引号规则</span><button class="btn sm copy-btn" type="button" data-copy="other-env">复制</button></div><pre id="other-env">OTHER_MODEL_API_KEY=&#x27;在本机填真实密钥&#x27;
 # 保留已生成的 CODEX_COLLABORATION_TOKEN</pre></div>
@@ -219,8 +219,10 @@ print(result[&quot;text&quot;])</pre></div>
 <tr><td>workspaces/仓库ID/request_id/</td><td>每个任务的独立本地成果，实际路径见工作台。</td></tr><tr><td>state/runs/request_id/</td><td>执行输出与诊断。</td></tr></tbody></table></div>
 <div class="table-wrap"><table><thead><tr><th>情况</th><th>处理方法</th></tr></thead><tbody>
 <tr><td>工作台打不开</td><td>确认本机运行环境和工作台进程已启动，前端已构建，8791 未被其它进程占用。</td></tr>
-<tr><td>Issue 没被领取</td><td>核对标题前缀、唯一未编辑的 owner 授权评论、host_id 和目标基线；仓库需开启 Issues。</td></tr>
-<tr><td>其它模型未被领取</td><td>核对 provider、型号、effort 映射和运行环境中的 key，空闲时重启加载配置。</td></tr>
+<tr><td>一直显示监听进程运行中</td><td>监听运行不代表模型正在执行。顶部“当前运行状态”显示有没有任务、上次完成 GitHub 检查的时间和未领取原因；页面刷新时间仅代表读取本机记录。</td></tr>
+<tr><td>Issue 没被领取</td><td>先看工作台“未领取的 Issue”的原因，再核对标题前缀、唯一未编辑的 owner 授权评论、host_id 和目标基线；仓库需开启 Issues。</td></tr>
+<tr><td>其它模型未被领取</td><td>模型名（包括大小写）和思考强度需精确匹配本机登记。不要把展示名称或其它服务的 max / xhigh 等强度直接套用。可从已鉴权的 GET /v1/models 读取登记值；配置更改后空闲时重启加载。</td></tr>
+<tr><td>等待模型回复时没有输出</td><td>当前任务显示第几轮、已用时间和最近活动；API 文件操作在执行阶段显示。回复到达后自动更新，等待时不显示模型内部推理。</td></tr>
 <tr><td>旧对话不匹配</td><td>使用回执完整 UUID，保持同一机器、目标仓库与后端；会话文件必须属于监听器用户。</td></tr>
 <tr><td>stale_base</td><td>默认分支已变化，重新读取基线，发布新 Issue、新 request_id 与新授权。</td></tr>
 <tr><td>failed</td><td>读取回执和诊断，核对已有文件；修复原因后创建新任务，不编辑旧授权。</td></tr>

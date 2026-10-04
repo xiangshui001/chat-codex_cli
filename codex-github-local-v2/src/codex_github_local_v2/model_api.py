@@ -30,8 +30,12 @@ class ModelRegistry:
         if not isinstance(self.providers, dict):
             raise MvpError("invalid_providers")
         self.limits = {}
-        for key, default, upper in (("max_turns", 12, 50), ("max_calls", 8, 32),
-                                    ("request_timeout", 120, 300), ("max_output_tokens", 8192, 32768)):
+        for key in ('max_turns', 'max_calls'):
+            val = data.get(key)
+            if val is not None and (type(val) is not int or val < 1):
+                raise MvpError('invalid_model_limit')
+            self.limits[key] = val  # null/omitted: no operation-count limit.
+        for key, default, upper in (("request_timeout", 600, 3600), ("max_output_tokens", 8192, 32768)):
             val = data.get(key, default)
             if type(val) is not int or not 1 <= val <= upper:
                 raise MvpError("invalid_model_limit")
@@ -129,7 +133,11 @@ class ModelClient:
             data = read_json(raw.decode("utf-8"))
         except HTTPError as exc:
             raise MvpError("model_http_" + str(exc.code)) from None
-        except (URLError, OSError, UnicodeError, ValueError) as exc:
+        except TimeoutError:
+            raise MvpError('model_request_timeout') from None
+        except URLError as exc:
+            raise MvpError('model_request_timeout' if isinstance(exc.reason, TimeoutError) else 'model_transport_failed') from None
+        except (OSError, UnicodeError, ValueError) as exc:
             raise MvpError("model_transport_failed") from None
         # No retry: a lost response may already have incurred a bill or produced a tool call.
         if not isinstance(data, dict) or data.get("error"):
@@ -184,7 +192,8 @@ class Collaboration:
         if type(index) is not int or not 0 <= index < len(self.options["collaborators"]):
             raise MvpError("collaborator_not_allowed")
         prompt = text(prompt, 24000, "invalid_consultation_prompt")
-        if self.calls >= self.registry.limits["max_calls"]:
+        limit = self.registry.limits['max_calls']
+        if limit is not None and self.calls >= limit:
             raise MvpError("collaboration_call_limit")
         self.calls += 1
         chosen = self.options["collaborators"][index]
@@ -200,7 +209,10 @@ class Collaboration:
                    {"role": "user", "content": prompt}]
         deadline = time.monotonic() + self.registry.limits["request_timeout"]
         tools = [CONSULT_TOOL] if self.options["mode"] == "gpt-led" else []
-        for _ in range(self.registry.limits["max_turns"]):
+        turns = 0
+        limit = self.registry.limits['max_turns']
+        while limit is None or turns < limit:
+            turns += 1
             result = self.client.call(self.options["primary"], history, tools, timeout=deadline-time.monotonic())
             history.extend(result["history"])
             if not result["calls"]:

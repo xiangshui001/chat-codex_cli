@@ -80,6 +80,32 @@ def progress(path: Path):
             'partial_lines': malformed}
 
 
+def activity(row):
+    """Only project known operational fields, never prompts or tool result content."""
+    result = {'kind': row['kind'], 'at': row['at']}
+    try:
+        detail = json.loads(row['detail'])
+    except (ValueError, TypeError):
+        return result
+    if not isinstance(detail, dict):
+        return result
+    turn, limit = detail.get('turn'), detail.get('max_turns')
+    budget = ''
+    if type(turn) is int and turn >= 1:
+        if limit is None:
+            budget = f'（第 {turn} 轮，无操作次数上限）'
+        elif type(limit) is int and limit >= turn:
+            budget = f'（第 {turn}/{limit} 轮）'
+    if row['kind'] in {'api_model_request', 'api_model_response'}:
+        result['label'] = ('正在等待模型回复' if row['kind'] == 'api_model_request' else '已收到模型回复') + budget
+    elif row['kind'] == 'api_file_tool':
+        name = {'read_file': '读取文件', 'list_files': '查看文件列表', 'write_file': '写入文件', 'delete_file': '删除文件'}.get(detail.get('name'), '文件工具')
+        result['label'] = name + ('失败' if detail.get('ok') is False else '') + budget
+        if isinstance(detail.get('path'), str):
+            result['label'] += ' · ' + clean(detail['path'], 300)
+    return result
+
+
 class Reader:
     database_name = 'mvp1.sqlite3'
     schema_version = 2
@@ -128,12 +154,26 @@ class Reader:
                      issue_url=f"https://github.com/{row['repo']}/issues/{row['issue_number']}")
         return value
 
+    def latest_activity(self, request_id, row):
+        result = activity(row) if row else None
+        path = self.config.state_dir / 'runs' / request_id / 'stdout.jsonl'
+        if path.is_file() and not path.is_symlink() and path.resolve().is_relative_to(self.config.state_dir.resolve()):
+            modified = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
+            if result is None or modified > datetime.fromisoformat(result['at']):
+                result = {'kind': 'execution_output', 'at': modified.isoformat(), 'label': '执行日志有更新'}
+        return result
+
     def overview(self):
         db = self.connect()
         try:
             db.execute('BEGIN')
             counts = dict(db.execute('SELECT state,COUNT(*) FROM tasks GROUP BY state'))
             tasks = [self.task(r) for r in db.execute(self.task_select + ' ORDER BY tasks.id DESC LIMIT 100')]
+            for task in tasks:
+                if task['state'] in {'running', 'queued'}:
+                    row = db.execute('SELECT kind,at,detail FROM events WHERE task_id=(SELECT id FROM tasks WHERE request_id=?) ORDER BY id DESC LIMIT 1',
+                                     (task['request_id'],)).fetchone()
+                    task['activity'] = self.latest_activity(task['request_id'], row)
         finally:
             db.close()
         return {'source': self.source, 'observed_at': datetime.now(timezone.utc).isoformat(),
@@ -151,8 +191,10 @@ class Reader:
                 raise KeyError(request_id)
             result = self.task(row)
             result.update(write_paths=json.loads(row['write_paths']), cwd=row['cwd'],
-                          events=[{'kind': r['kind'], 'at': r['at']} for r in db.execute(
-                              'SELECT kind,at FROM events WHERE task_id=? ORDER BY id LIMIT 500', (row['id'],))])
+                          events=[activity(r) for r in db.execute(
+                              'SELECT kind,at,detail FROM events WHERE task_id=? ORDER BY id LIMIT 500', (row['id'],))])
+            recent = db.execute('SELECT kind,at,detail FROM events WHERE task_id=? ORDER BY id DESC LIMIT 1', (row['id'],)).fetchone()
+            result['activity'] = self.latest_activity(request_id, recent)
             repository_id = row['target_id'] if self.schema_version == 3 else row['repository_id']
             diff_base = row['base_sha'] if self.schema_version == 3 else 'HEAD'
         finally:
@@ -188,6 +230,46 @@ class DesktopReader(Reader):
     schema_version = 3
     source = 'local-mvp2'
     task_select = 'SELECT tasks.*,deliveries.* FROM tasks JOIN deliveries ON deliveries.task_id=tasks.id'
+
+    def overview(self):
+        result = super().overview()
+        result['monitor'] = self.monitor()
+        return result
+
+    def monitor(self):
+        path = self.config.state_dir / 'listener-status.json'
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 128 * 1024:
+            return None
+        try:
+            data = json.loads(path.read_text(encoding='utf-8'))
+            if not isinstance(data, dict) or data.get('version') != 1 or (
+                    data.get('owner'), data.get('host_id'), data.get('workspace_root')) != (
+                    self.config.owner, self.config.host_id, str(self.config.workspace_root)):
+                return None
+            phases = {'starting', 'checking', 'idle', 'executing', 'publishing', 'error', 'blocked'}
+            if data.get('phase') not in phases:
+                return None
+            result = {'phase': data['phase'], 'rejected': []}
+            for key in ('updated_at', 'last_poll_started_at', 'last_poll_finished_at', 'next_poll_at', 'last_error'):
+                result[key] = clean(data.get(key), 100) or None
+            for key in ('repository_count', 'checked_repositories', 'error_count'):
+                result[key] = max(0, data[key]) if type(data.get(key)) is int else 0
+            result['rejections_truncated'] = data.get('rejections_truncated') is True
+            for item in data.get('rejected', [])[:50]:
+                repo, number = item.get('repo'), item.get('issue_number')
+                if not isinstance(repo, str) or not re.fullmatch(re.escape(self.config.owner) + r'/[A-Za-z0-9_.-]+', repo, re.I) or type(number) is not int or number < 1:
+                    continue
+                entry = {'repo': repo, 'issue_number': number, 'issue_url': f'https://github.com/{repo}/issues/{number}',
+                         'reason': clean(item.get('reason'), 100)}
+                for key in ('provider', 'model', 'effort', 'suggested_model'):
+                    if isinstance(item.get(key), str):
+                        entry[key] = clean(item[key], 150)
+                if isinstance(item.get('allowed_efforts'), list):
+                    entry['allowed_efforts'] = [clean(x, 30) for x in item['allowed_efforts'][:8] if isinstance(x, str)]
+                result['rejected'].append(entry)
+            return result
+        except (OSError, ValueError, TypeError, AttributeError):
+            return None
 
     @staticmethod
     def task(row):
