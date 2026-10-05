@@ -20,6 +20,10 @@ if mode == "timeout":
     time.sleep(60)
 if mode == "flood":
     print("x" * 100000, flush=True)
+if mode == "large_log":
+    event = json.dumps({"type": "item.completed", "item": {"text": "x" * 1024}})
+    for _ in range(17000):
+        print(event)
 if mode == "invalid":
     print("not JSON")
 print(json.dumps({"type": "item.completed", "item": {"type": "command_execution"}}))

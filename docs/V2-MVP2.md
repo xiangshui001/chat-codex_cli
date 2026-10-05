@@ -161,3 +161,5 @@ HTTP 模式使用 provider ID；GPT 模式 primary 选本机登记的 `kind: gpt
 官方接口依据：[Codex CLI 会话与参数](https://learn.chatgpt.com/docs/developer-commands?surface=cli)、[MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Responses function calling](https://developers.openai.com/api/docs/guides/function-calling)。实际型号/effort 是否可用由账号和 provider 决定，未在代码中假定所有型号支持所有强度。
 
 MVP-2 的 `timeout_seconds` 可设为 1–10800 秒，当前安装示例为 10800 秒（3 小时）。这是单个任务的总执行时限，与模型单次 API 请求超时分开。已有执行使用启动时的时限；修改本机配置后须在任务结束、监听器空闲时重启监听服务，新任务才使用新值。
+
+Codex CLI 执行日志默认不设大小上限，超过 16 MiB 或 1 GiB 不会因日志大小终止任务。输出直接写入本机文件，完成检查按行读取日志。工作台仍分页显示日志，完整日志留在本机；任务总时限仍由 `timeout_seconds` 决定。
