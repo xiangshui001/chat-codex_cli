@@ -34,8 +34,25 @@ class AppServerRunner:
                 proc.stdin.write((json.dumps({'id':counter,'method':method,'params':params},ensure_ascii=False)+'\n').encode());proc.stdin.flush()
                 return counter
             def start_turn(text,context=None):
+                contexts=([context] if isinstance(context,dict) else list(context or []))
+                while messages:
+                    instruction,message=messages.pop(0)
+                    text+='\n\nLatest owner instruction from Issue comment '+str(message['comment_id'])+':\n'+instruction
+                    contexts.append({**message,'text':instruction})
                 send('turn/start',{'threadId':thread,'input':[{'type':'text','text':text}],
-                    'model':metadata['model'],'effort':metadata['effort'],'cwd':metadata['cwd'],'approvalPolicy':'never'},context)
+                    'model':metadata['model'],'effort':metadata['effort'],'cwd':metadata['cwd'],'approvalPolicy':'never'},contexts)
+            def queued_steer():
+                if not turn or not messages:return
+                queued=list(messages);messages.clear()
+                send('turn/steer',{'threadId':thread,'expectedTurnId':turn,
+                    'input':[{'type':'text','text':text} for text,_ in queued]},
+                    [{**message,'text':text} for text,message in queued])
+            def restore_messages(context):
+                for message in ([context] if isinstance(context,dict) else context or []):
+                    messages.append((message['text'],message))
+            def acknowledge(context):
+                for message in ([context] if isinstance(context,dict) else context or []):
+                    self.ack(message['id']);record('remote_instruction_applied',{'comment_id':message['comment_id']})
             try:
                 proc=subprocess.Popen(metadata['argv'],cwd=metadata['cwd'],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=stderr,start_new_session=True)
                 audit['pid']=proc.pid;audit['lease']=identity(proc.pid)
@@ -60,8 +77,8 @@ class AppServerRunner:
                         if msg['action'] in {'say','allow','retry'}:
                             text=msg['text'] if msg['action']=='say' else ('Updated authorized write paths: '+msg['text'] if msg['action']=='allow' else 'Continue from retained progress; do not restart completed operations.')
                             if turn:
-                                send('turn/steer',{'threadId':thread,'expectedTurnId':turn,'input':[{'type':'text','text':text}]},msg)
-                            else:messages.append((text,msg))
+                                send('turn/steer',{'threadId':thread,'expectedTurnId':turn,'input':[{'type':'text','text':text}]},{**msg,'text':text})
+                            else:messages.append((text,{**msg,'text':text}))
                     if retry_at is not None and time.monotonic()>=retry_at:
                         retry_at=None
                         start_turn('The prior turn failed because of a transport/service error. Continue the same task from existing files and completed tool results. Do not repeat completed work. Resolve routine issues yourself. '+prompt)
@@ -81,7 +98,8 @@ class AppServerRunner:
                         method,context=pending.pop(message['id'],('',None))
                         if 'error' in message:
                             if method=='turn/steer' and context:
-                                messages.append((context['text'],context));continue
+                                restore_messages(context);continue
+                            if method=='turn/start' and context:restore_messages(context)
                             # A refused start/resume is visible remotely; keep server/context available for repair.
                             record('remote_recovery',{'reason':'codex_rpc_error','method':method,'rpc_error':message['error']})
                             if method in {'thread/start','thread/resume'}:raise MvpError('codex_thread_unavailable')
@@ -101,7 +119,8 @@ class AppServerRunner:
                             start_turn(prompt)
                         elif method in {'turn/start','turn/steer'}:
                             if method=='turn/start':turn=result.get('turn',{}).get('id',turn);completed=False
-                            if context:self.ack(context['id']);record('remote_instruction_applied',{'comment_id':context['comment_id']})
+                            acknowledge(context)
+                            if method=='turn/start':queued_steer()
                         continue
                     method=message.get('method','');params=message.get('params',{})
                     if 'id' in message:
@@ -129,6 +148,7 @@ class AppServerRunner:
                             continue
                     if method=='turn/started':
                         turn=params.get('turn',{}).get('id',turn);event('turn.started');record('remote_turn_started',{'turn_id':turn})
+                        queued_steer()
                     elif method=='item/completed':
                         item=dict(params.get('item',{}));kind=item.get('type')
                         mapping={'agentMessage':'agent_message','commandExecution':'command_execution','fileChange':'file_change','plan':'plan','mcpToolCall':'mcp_tool_call'}

@@ -293,9 +293,15 @@ for line in sys.stdin:
  elif method in ("thread/start","thread/resume"):
   (root/"thread-params.json").write_text(json.dumps(p));out({"id":ident,"result":{"thread":{"id":thread}}})
  elif method=="turn/start":
-  number+=1;turn="turn-"+str(number);out({"id":ident,"result":{"turn":{"id":turn}}});notify('turn/started',{'turn':{'id':turn}})
+  number+=1;turn="turn-"+str(number)
+  (root/("start-"+str(number)+".json")).write_text(json.dumps(p))
+  if mode=='rpc-retry' and number==1:
+   out({'id':ident,'error':{'code':-32000,'message':'temporary start failure'}});continue
+  if mode=='late-steer':
+   (root/'start-waiting').write_text(turn);time.sleep(.5)
+  out({"id":ident,"result":{"turn":{"id":turn}}});notify('turn/started',{'turn':{'id':turn}})
   if mode in ('recover','stale') and number==1:notify('turn/completed',{'turn':{'id':turn,'status':'failed','error':{'message':'temporary network failure'}}})
-  elif mode=="steer":(root/"ready").write_text(turn)
+  elif mode in ("steer","late-steer"):(root/"ready").write_text(turn)
   else:
    if mode in ('foreign','foreign-failure'):
     notify('turn/started',{'turn':{'id':'child-turn'}},'child-thread')
@@ -343,6 +349,43 @@ class AppServerTests(fixtures.Fixture):
         self.assertEqual(len([e for e in events if e[0]=='remote_session_opened']),1)
         self.assertEqual(len([e for e in events if e[0]=='remote_turn_started']),2)
         self.assertTrue(any(e[0]=='remote_recovery' for e in events))
+
+    def test_initial_owner_constraints_are_in_first_request_without_extra_turn(self):
+        acknowledged=[];events=[]
+        messages=[{'id':i,'comment_id':200+i,'action':'say','text':text}
+                  for i,text in ((1,'Do not submit any new model jobs'),(2,'Use saved answers only'))]
+        def control():return [m for m in messages if m['id'] not in acknowledged]
+        result=AppServerRunner(control,acknowledged.append).run(self.metadata('foreign'),'original',self.root/'run',10,lambda k,d:events.append((k,d)))
+        self.assertIsNone(result.error)
+        first=json.loads((self.root/'start-1.json').read_text())['input'][0]['text']
+        for message in messages:self.assertIn(message['text'],first)
+        self.assertEqual(acknowledged,[1,2])
+        self.assertFalse((self.root/'start-2.json').exists())
+        self.assertEqual([d['turn_id'] for k,d in events if k=='remote_turn_started'],['turn-1'])
+
+    def test_instruction_arriving_during_start_is_steered_into_current_turn(self):
+        acknowledged=[]
+        message={'id':1,'comment_id':222,'action':'say','text':'No new calls; inspect retained results'}
+        def control():return [message] if (self.root/'start-waiting').exists() and not acknowledged else []
+        result=AppServerRunner(control,acknowledged.append).run(self.metadata('late-steer'),'original',self.root/'run',5,lambda *_:None)
+        self.assertIsNone(result.error)
+        steer=json.loads((self.root/'steer.json').read_text())
+        self.assertEqual(steer['expectedTurnId'],'turn-1')
+        self.assertEqual(steer['input'][0]['text'],message['text'])
+        self.assertEqual(acknowledged,[1])
+        self.assertFalse((self.root/'start-2.json').exists())
+
+    def test_rpc_start_retry_keeps_unacknowledged_owner_constraints(self):
+        acknowledged=[]
+        message={'id':1,'comment_id':222,'action':'say','text':'Do not repeat the paid jobs'}
+        def control():return [message] if not acknowledged else []
+        result=AppServerRunner(control,acknowledged.append).run(self.metadata('rpc-retry'),'original',self.root/'run',10,lambda *_:None)
+        self.assertIsNone(result.error)
+        for number in (1,2):
+            start=json.loads((self.root/('start-'+str(number)+'.json')).read_text())
+            self.assertIn(message['text'],start['input'][0]['text'])
+        self.assertEqual(acknowledged,[1])
+        self.assertFalse((self.root/'start-3.json').exists())
 
     def test_child_completion_cannot_finish_the_parent_or_replace_its_answer(self):
         events=[]
