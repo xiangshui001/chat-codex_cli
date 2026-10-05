@@ -89,7 +89,7 @@ class CodexRunner:
                 )
                 audit["pid"] = proc.pid
                 record("process_started", {"pid": proc.pid, "at": utc_now()})
-                deadline = time.monotonic() + timeout
+                deadline = time.monotonic() + timeout if timeout is not None else float("inf")
                 first = True
                 while True:
                     try:

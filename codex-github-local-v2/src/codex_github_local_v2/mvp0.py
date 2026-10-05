@@ -50,7 +50,7 @@ def fields(value, required: set[str], optional: set[str] = frozenset()):
 
 
 def text(value, limit: int, code: str) -> str:
-    if not isinstance(value, str) or not value.strip() or len(value) > limit or "\x00" in value:
+    if not isinstance(value, str) or not value.strip() or (limit is not None and len(value) > limit) or "\x00" in value:
         raise MvpError(code)
     try:
         value.encode("utf-8")
@@ -65,8 +65,8 @@ def positive_id(value) -> int:
     return value
 
 
-def write_path(value: str) -> str:
-    value = text(value, 300, "invalid_write_paths")
+def write_path(value: str, *, remote=False) -> str:
+    value = text(value, None if remote else 300, "invalid_write_paths")
     path = PurePosixPath(value)
     if (path.is_absolute() or "//" in value or value.rstrip("/") != path.as_posix() or value in {".", ""}
             or any(p in {"..", ".git", ".codex"} for p in (part.lower() for part in path.parts))
@@ -139,7 +139,7 @@ class Task:
 
 
 def parse_task(issue: dict, comments: list[dict], config: Config, *,
-               title_prefix: str = TITLE_PREFIX, marker: str = MARKER) -> Task:
+               title_prefix: str = TITLE_PREFIX, marker: str = MARKER, remote: bool = False) -> Task:
     if (not isinstance(issue, dict) or "pull_request" in issue or issue.get("state") != "open"
             or not str(issue.get("title", "")).startswith(title_prefix)):
         raise MvpError("not_mvp_issue")
@@ -156,7 +156,7 @@ def parse_task(issue: dict, comments: list[dict], config: Config, *,
     comment_id = positive_id(comment.get("id"))
     if not comment.get("created_at") or comment.get("created_at") != comment.get("updated_at"):
         raise MvpError("edited_authorization")
-    body = text(comment["body"], 20000, "authorization_too_large")
+    body = text(comment["body"], None if remote else 20000, "authorization_too_large")
     payload = body.split("\n", 1)[1].strip() if "\n" in body else ""
     if payload.startswith("```"):
         match = re.fullmatch(r"```json\s*\n([\s\S]+)\n```", payload)
@@ -178,11 +178,11 @@ def parse_task(issue: dict, comments: list[dict], config: Config, *,
     if not re.fullmatch(r"[0-9a-f]{40}", text(data["base_sha"], 40, "invalid_base_sha")):
         raise MvpError("invalid_base_sha")
     fields(data["task"], {"prompt", "write_paths"})
-    prompt = text(data["task"]["prompt"], 12000, "invalid_prompt")
+    prompt = text(data["task"]["prompt"], None if remote else 12000, "invalid_prompt")
     paths = data["task"]["write_paths"]
-    if not isinstance(paths, list) or not 1 <= len(paths) <= 32:
+    if not isinstance(paths, list) or (not paths or (not remote and len(paths) > 32)):
         raise MvpError("invalid_write_paths")
-    paths = tuple(write_path(p) for p in paths)
+    paths = tuple("." if remote and p in {".", "./", "*", "/"} else write_path(p, remote=remote) for p in paths)
     if len(set(paths)) != len(paths):
         raise MvpError("duplicate_write_path")
     digest = hashlib.sha256(body.encode("utf-8")).hexdigest()
@@ -310,13 +310,13 @@ class GitHub:
         self.repository_id = None
         self.writer_id = None
 
-    def api(self, endpoint: str, body: dict | None = None):
+    def api(self, endpoint: str, body: dict | None = None, *, method=None):
         argv = [*self.command, "api", "--hostname", "github.com", endpoint]
         if body is not None:
-            argv += ["--method", "POST", "--input", "-"]
+            argv += ["--method", method or "POST", "--input", "-"]
         try:
             result = subprocess.run(argv, input=json.dumps(body) if body is not None else None,
-                text=True, encoding="utf-8", capture_output=True, timeout=30)
+                text=True, encoding="utf-8", capture_output=True, timeout=None)
         except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
             raise MvpError("github_transport_unavailable") from exc
         if result.returncode:
@@ -426,7 +426,7 @@ class Workspace:
             raise MvpError("unexpected_head_change")
         for path in changes:
             self.safe_path(path)
-            if not any(path == scope.rstrip("/") or (scope.endswith("/") and path.startswith(scope)) for scope in task.write_paths):
+            if not any(scope == "." or path == scope.rstrip("/") or (scope.endswith("/") and path.startswith(scope)) for scope in task.write_paths):
                 raise MvpError("write_scope_violation")
 
 

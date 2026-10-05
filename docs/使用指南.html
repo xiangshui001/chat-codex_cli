@@ -11,14 +11,14 @@ details{border:1px solid var(--line);border-radius:11px;padding:0 17px;margin:16
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.toast{transition:none}}
 @media print{@page{size:A4;margin:13mm}body{background:white;font-size:11pt;color:#111}.shell{max-width:none;padding:0}.masthead .btn,.rail,.copy-btn,.no-print,.toast{display:none!important}.hero{box-shadow:none;padding:20px;display:block;border-radius:8px}.hero-status{border-left:0;padding:0;margin-top:15px}.layout{display:block;margin-top:20px}section{padding:18px;border-radius:8px}.section-head,h3,h4{break-after:avoid}.card,.stat,.note,.step{break-inside:avoid}.grid2{gap:10px}.form,.mode-picker,.form-block{display:none}.pathbox pre{max-height:none;overflow:visible;font-size:9pt}.pathbox.dark pre{background:#f2f5f2;color:#111}.pathbox.dark .codebar{background:#e5ebe7;color:#111}.table-wrap{overflow:visible}table{min-width:0;font-size:10pt}a{color:#111}h1{font-size:26pt}h2{font-size:18pt}.hero-links{display:none}.endcap{padding:10px}}
 </style></head><body>
-<div class="topline"></div><div class="shell"><header class="masthead"><div class="brand">chat-codex_cli <span>V2 0.1.0 · 通用中文指南</span></div><button class="btn no-print" id="print-guide" type="button">打印 / 存为 PDF</button></header>
+<div class="topline"></div><div class="shell"><header class="masthead"><div class="brand">chat-codex_cli <span>V2 0.2.0 · 通用中文指南</span></div><button class="btn no-print" id="print-guide" type="button">打印 / 存为 PDF</button></header>
 <div class="hero"><div><p class="eyebrow">从 Chat 派单，到自己的电脑执行</p><h1>新版本做了什么，<br>怎样在你的电脑使用</h1>
 <p class="lead">通过 GitHub Issue 发布任务，指定机器、对话、模型和思考强度。每台电脑保存成果，回写完成回执并提交草稿 PR。</p>
-<div class="hero-links"><a class="btn primary" href="#use">首次安装 ↓</a><a class="btn" href="#builder">生成派单指令 ↓</a><a class="btn" href="http://127.0.0.1:8791/" target="_blank" rel="noopener">打开已启动的本机工作台 ↗</a></div></div>
+<div class="hero-links"><a class="btn primary" href="#remote">手机使用 ↓</a><a class="btn" href="#use">首次安装 ↓</a><a class="btn" href="#builder">生成派单指令 ↓</a><a class="btn" href="http://127.0.0.1:8791/" target="_blank" rel="noopener">打开已启动的本机工作台 ↗</a></div></div>
 <aside class="hero-status" aria-label="版本说明"><div class="row"><div class="status-title"><span class="dot"></span>main 统一使用最新版本</div><p class="status-text">默认监听命令与工作台均进入 MVP-2；V1 留在历史目录。</p></div>
 <div class="row"><div class="status-title"><span class="dot"></span>各用户、各电脑独立配置</div><p class="status-text">owner、host_id、记录仓库和私有路径均可自行选择。</p></div>
 <div class="row"><div class="status-title"><span class="dot amber"></span>执行端已验证 Linux / WSL</div><p class="status-text">Windows 在 WSL 运行。本文不代表你的电脑已经安装或启动。</p></div></aside></div>
-<div class="layout"><nav class="rail" aria-label="指南目录"><p>阅读路线</p><a href="#changes">01 做了什么</a><a href="#use">02 首次安装与使用</a><a href="#builder">03 生成派单指令</a><a href="#session">04 继续旧对话</a><a href="#models">05 配置其它模型</a><a href="#api">06 程序调用 API</a><a href="#care">07 本机管理与排查</a><a href="#evidence">08 验证与历史</a><p class="foot">本文件可离线阅读。<br>新用户先看 02、03。<br>API 配置按需查看 05、06。</p></nav><main class="content"><section id="changes"><div class="section-head"><span class="number">01</span><div><h2>这次版本实现了什么</h2><p>从 GitHub 派单，到电脑执行，再到成果交付。</p></div></div>
+<div class="layout"><nav class="rail" aria-label="指南目录"><p>阅读路线</p><a href="#remote">手机日常操作</a><a href="#changes">01 做了什么</a><a href="#use">02 首次安装与使用</a><a href="#builder">03 生成派单指令</a><a href="#session">04 继续旧对话</a><a href="#models">05 配置其它模型</a><a href="#api">06 程序调用 API</a><a href="#care">07 本机管理与排查</a><a href="#evidence">08 验证与历史</a><p class="foot">本文件可离线阅读。<br>新用户先看 02、03。<br>API 配置按需查看 05、06。</p></nav><main class="content"><section id="changes"><div class="section-head"><span class="number">01</span><div><h2>这次版本实现了什么</h2><p>从 GitHub 派单，到电脑执行，再到成果交付。</p></div></div>
 <div class="grid2">
 <div class="card"><span class="pill">对话上下文</span><h3>新建或继续指定旧对话</h3><p>新任务可创建 Codex CLI 对话，也可用明确 UUID 续接本机旧对话；回执和工作台显示会话 ID。其它 API 模型保留自己的本机消息历史。</p></div>
 <div class="card"><span class="pill">模型协作</span><h3>三种模式，型号与思考强度可选</h3><p>只用 GPT、只用其它 OpenAI 兼容 API、或由 GPT 主导咨询其它模型。接口与密钥在本机登记，任务只选择名称。</p></div>
@@ -27,6 +27,24 @@ details{border:1px solid var(--line);border-radius:11px;padding:0 17px;margin:16
 <div class="flow"><div class="item">Chat 派单<span>GitHub Issue + 授权</span></div><span class="arrow">→</span><div class="item">本机执行<span>匹配 host_id</span></div><span class="arrow">→</span><div class="item">保留成果<span>本地目录</span></div><span class="arrow">→</span><div class="item">回执与 PR<span>用户审查</span></div></div>
 <div class="note"><strong>main 的当前安装入口统一为最新版本。</strong>V1 的代码、测试和旧手册在 history/v1；早期 V2 文档与示例在 history/v2。当前默认命令直接运行最新监听器，工作台默认读取最新任务。</div>
 </section>
+<section id="remote"><div class="section-head"><span class="number">手机</span><div><h2>在原 Issue 持续对话</h2><p>几小时后查询进度、追加要求，都在同一个 Issue 完成。</p></div></div>
+<div class="grid2"><div class="card"><h3>直接创建任务</h3><p>在工作仓库新建 Issue，正文复制下方模板；desktop 换成目标电脑的 host_id。无需 UUID、SHA 或额外授权评论。</p><div class="pathbox"><div class="codebar"><span>Issue 正文</span><button type="button" class="btn sm" data-copy="mobile-template">复制</button></div><pre id="mobile-template">/codex run desktop
+model: gpt-6.1-sol
+effort: high
+paths: .
+
+这里写具体任务，完成后保存成果、提交 PR 并回复这个 Issue。</pre></div></div>
+<div class="card"><h3>原对话继续使用</h3><p>电脑领取立即回执。运行中追加评论会进入原对话；任务结束后继续留言会复用原目录和上下文开启下一轮。</p><p>记录仓库派单增加 <code>repo: OWNER/PROJECT</code>。其它 API 增加 <code>mode: api</code>、<code>provider: other</code>，型号按本机登记值填写。</p></div></div>
+<div class="table-wrap"><table><thead><tr><th>手机留言</th><th>电脑如何处理</th></tr></thead><tbody>
+<tr><td><code>/codex status</code> 或“进度”</td><td>回复阶段、最近活动和 PR；不会重新调用模型。</td></tr>
+<tr><td>直接写新的指示</td><td>运行中送入原对话；结束后使用保留现场继续。</td></tr>
+<tr><td><code>/codex retry</code></td><td>原目录、原对话续跑。</td></tr>
+<tr><td><code>/codex allow .</code></td><td>扩大到整个仓库；也可写具体相对路径。</td></tr>
+<tr><td><code>/codex stop</code></td><td>停止当前进程并保留文件与上下文。</td></tr>
+<tr><td><code>/codex merge</code></td><td>尝试合并成果 PR，有冲突或检查会回复原因。</td></tr>
+</tbody></table></div>
+<div class="note"><strong>长任务默认不设本机预算上限。</strong>任务/API/Git 时长、日志、上下文、响应正文、输出 token、轮数与协作次数默认不设上限。API 支持大文件、分页、分块、追加、二进制、命令与测试；预览截断只影响显示。服务商上下文、额度和电脑磁盘仍以实际能力为准。</div>
+<p>默认每 15 分钟在 Issue 更新进度，也可随时查询。临时故障保留现场恢复；服务拒绝会提示接口问题并等待恢复。电脑须开机联网且监听器正在运行；手机日常操作走 GitHub，127.0.0.1 工作台仅本机访问。</p></section>
 <section id="use"><div class="section-head"><span class="number">02</span><div><h2>第一次安装与日常使用</h2><p>各电脑独立安装；已有当前版本的用户可直接跳到第 03 节。</p></div></div><p>执行端已验证 Linux / Ubuntu / WSL。Windows 用户在 WSL 中运行；原生 Windows 与 macOS 执行端尚未验收。Chat 的 GitHub 连接与本机 gh 是两套凭据，需要同一 owner 且都能访问任务仓库。</p><details><summary>1. 准备依赖、登录并获取 main</summary><p>在 Linux / Ubuntu / WSL 的 Bash 终端执行。先按官方说明安装 Python 3.11+、Git、gh 和 Codex CLI；前端构建需要 Node.js 22.12+。</p><div class="pathbox dark"><div class="codebar"><span>Linux / WSL · Bash</span><button class="btn sm copy-btn" type="button" data-copy="install-1">复制</button></div><pre id="install-1">python3 --version
 git --version
 gh auth login
@@ -54,7 +72,8 @@ config = {
     &quot;workspace_root&quot;: str(root / &quot;workspaces&quot;),
     &quot;state_dir&quot;: str(root / &quot;state&quot;),
     &quot;models_file&quot;: str(root / &quot;models.json&quot;),
-    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: 10800, &quot;max_parallel_tasks&quot;: 3
+    &quot;poll_seconds&quot;: 60, &quot;timeout_seconds&quot;: None, &quot;max_parallel_tasks&quot;: 3,
+    &quot;full_access&quot;: True, &quot;auto_merge&quot;: False, &quot;progress_seconds&quot;: 900
 }
 files = {
     &quot;config.json&quot;: json.dumps(config, ensure_ascii=False, indent=2) + &quot;\n&quot;,
@@ -87,8 +106,8 @@ set +a
 <div class="note blue"><strong>记录仓库可自行选择。</strong>初始配置使用“你的账号/codex-cli”。要从它派单，先建立该仓库并开启 Issues；也可改为本人已有的记录仓库。仅从目标仓库派单时无需建立记录仓库。</div>
 <ol><li>安装成功后，在第 03 节填写本机配置中的 owner 和 host_id，选择工作仓库、允许修改路径、对话和模型。</li><li>复制生成的指令给连接 GitHub 的 Chat，或自行生成授权评论。发布后保留 Issue 链接。</li><li>查看工作台任务详情与原 Issue 回执，取得本地目录、session_id 和草稿 PR。审查文件后再合并 PR。</li></ol>
 <p class="small">监听器、工作台和可选 HTTP API 是独立进程。项目不自动安装开机服务；需要持续运行时，可在一次小任务验证通过后交给自己的进程管理器。电脑、WSL 或进程停止时不会继续执行。</p>
-<div class="note blue"><strong>同时执行多个任务：</strong>本机 config.json 的 <code>max_parallel_tasks</code> 控制并发数量，新安装示例为 3，允许 1–16；省略时为 1。每个任务使用独立执行进程、目录与分支；同一旧对话依次执行。名额满时其余 Issue 留在 GitHub，下一轮检查自动领取。工作台顶部展示全部当前任务及各自的最近活动。失败任务和无效授权不会自动重跑。</div>
-<p class="small">已有 schema 3 安装：等待当前任务完成，停止监听器，安装新代码后执行 <code>codex-github-local-v2 --config /ABS/PRIVATE/config.json --migrate-state</code>，再在私有配置加入 <code>"max_parallel_tasks": 3</code> 并重新启动。迁移命令先备份数据库，升级至 schema 4，保留旧任务与对话；运行中的任务不能迁移。</p>
+<div class="note blue"><strong>同时执行多个任务：</strong>本机 config.json 的 <code>max_parallel_tasks</code> 控制并发数量，新安装示例为 3，可设任意正整数；省略时为 1。每个任务使用独立执行进程、目录与分支；同一旧对话依次执行。名额满时其余 Issue 留在 GitHub，下一轮检查自动领取。工作台顶部展示全部当前任务及各自的最近活动。临时故障保留现场恢复；完成/失败后在原 Issue 追加指示即可续跑。</div>
+<p class="small">已有 schema 3/4 安装：等待当前任务完成，停止监听器，安装新代码后执行 <code>codex-github-local-v2 --config /ABS/PRIVATE/config.json --migrate-state</code>，再在私有配置加入 <code>"max_parallel_tasks": 3</code> 并重新启动。迁移命令先备份数据库，升级至 schema 5，保留旧任务与对话；运行中的任务不能迁移。</p>
 </section>
 <section id="builder">
 <div class="section-head"><span class="number">03</span><div><h2>生成可以直接发给 Chat 的指令</h2><p>填写下面信息，复制给连接了 GitHub 的 Chat。这里不会自行发布 Issue。</p></div></div>
@@ -105,7 +124,7 @@ set +a
 
 <div class="field"><label for="target-repo">实际工作仓库</label><input id="target-repo" placeholder="例如 your-account/your-project" maxlength="200" spellcheck="false"><p class="help">填 owner/仓库名，不填完整网址。</p></div>
 <div class="field"><label for="issue-location">Issue 发布位置</label><select id="issue-location"><option value="target">工作目标仓库</option><option value="hub">本机记录仓库（填写上方 hub_repo）</option></select><p class="help">PR 始终发到实际工作仓库。</p></div>
-<div class="field wide"><label for="task-prompt">任务要求</label><textarea id="task-prompt" placeholder="例如：新增 docs/check.txt，写入本机监听正常；完成后检查内容并提交 PR。" maxlength="12000"></textarea></div>
+<div class="field wide"><label for="task-prompt">任务要求</label><textarea id="task-prompt" placeholder="例如：新增 docs/check.txt，写入本机监听正常；完成后检查内容并提交 PR。"></textarea></div>
 <div class="field wide"><label for="write-paths">允许修改的文件或目录</label><textarea id="write-paths" style="min-height:65px" spellcheck="false">docs/check.txt</textarea><p class="help">每行一个，或用逗号分隔。目录写成 docs/；使用 / 分隔。不使用绝对路径、..、通配符、.git 或 .codex。</p></div>
 <div class="field"><label for="session-mode">本次对话</label><select id="session-mode"><option value="new">新建对话</option><option value="resume">继续旧对话</option></select></div>
 <div class="field" id="session-id-field" hidden><label for="session-id">旧对话完整 session_id</label><input id="session-id" placeholder="从回执或工作台中复制 UUID" maxlength="36" spellcheck="false"><p class="help">必须属于本机、同一目标仓库与执行后端。</p></div>
@@ -129,8 +148,8 @@ set +a
 <ol><li>从上一轮 Issue 完成回执复制 <code>session_id</code>，或点开工作台任务查看会话 ID。</li><li>下一轮使用<strong>同一个目标仓库和本机执行端</strong>。在第 03 节选择“继续旧对话”，粘贴完整 UUID。</li><li>新任务仍可选择型号与强度。GPT CLI 对话使用 codex；其它 API 对话继续使用原来的 provider。</li><li>发布新的 Issue、新的 request_id，完成后检查回执中的会话 ID。</li></ol>
 <div class="grid2"><div class="card"><h4>保留下来：对话里的讨论</h4><p>前面说过的需求、分析与上下文可以继续使用。续接从上轮回执中的明确会话 ID 读取本机上下文。</p></div><div class="card"><h4>本轮代码：从当前默认分支开始</h4><p>每次任务使用独立克隆。需要基于旧改动继续做时，先审查并合并旧 PR，再发布新任务；未合并文件不会自动带入。</p></div></div>
 <div class="note blue">这里的 ID 是<strong>执行端 Codex CLI 或 API 执行器的对话 ID</strong>，直接来源是任务回执和工作台。当前 Chat 页面的聊天不会自动成为执行端会话。</div>
-<p>API 回复被截断、缺少完成标记或为空时，执行器保留上下文并请求继续，工作台显示恢复原因。截断的工具指令不会执行；单次输出预算可逐步增至 <code>recovery_max_output_tokens</code>（默认 32768）。仍受任务总时限和上下文容量约束。</p>
-<p class="small">已失败的 API 任务：明确要求恢复后，停止监听器并运行 <code>codex-github-local-v2 --config /ABS/PRIVATE/config.json --recover-api-session 原任务UUID</code>，取得会话 ID，再以当前基线和新任务 UUID 发布续接。该命令只找回上下文，不重放旧任务，旧授权和记录保留。</p>
+<p>API 回复被截断、缺少完成标记或为空时，执行器保留上下文并请求继续，工作台显示恢复原因。截断的工具指令不会执行；默认不设本机输出预算、时长或上下文大小上限；单次输出截断会继续恢复，完整上下文逐步保存。</p>
+<p class="small">已失败的 API 任务：在原 Issue 评论 <code>/codex retry</code> 即可从保留目录和对话继续；无需停止监听器或重新派单。升级前的旧现场会先核对执行记录，原授权和上一轮结果快照保留。</p>
 <details><summary>已有更早的 Codex CLI 对话可以导入吗？</summary><p>可以，但 UUID 对应会话文件必须存在于运行监听器的系统用户的 Codex 会话目录，而且原工作目录的 Git origin 要与本次目标仓库一致。找不到或来源不匹配时拒绝续接。</p><p class="small">会话必须属于实际运行监听器的同一系统用户。仅存在于其它用户、其它电脑或 Windows 端的历史文件，需要先核对执行端是否能识别，不能只凭页面显示的 ID 假定可用。</p></details>
 </section>
 <section id="models"><div class="section-head"><span class="number">05</span><div><h2>接入自己的其它模型</h2><p>只用 GPT CLI 可以保留空 providers；其它 API 和 GPT 主导需要登记模型。</p></div></div>
@@ -155,8 +174,8 @@ set +a
   },
   &quot;max_turns&quot;: null,
   &quot;max_calls&quot;: null,
-  &quot;request_timeout&quot;: 600,
-  &quot;max_output_tokens&quot;: 8192
+  &quot;request_timeout&quot;: null,
+  &quot;max_output_tokens&quot;: null
 }</pre></div><div class="pathbox dark"><div class="codebar"><span>service.env · 本机填写，遵循 Bash 引号规则</span><button class="btn sm copy-btn" type="button" data-copy="other-env">复制</button></div><pre id="other-env">OTHER_MODEL_API_KEY=&#x27;在本机填真实密钥&#x27;
 # 保留已生成的 CODEX_COLLABORATION_TOKEN</pre></div>
 <div class="table-wrap"><table><thead><tr><th>配置项</th><th>怎样填写</th></tr></thead><tbody>
@@ -228,7 +247,7 @@ print(result[&quot;text&quot;])</pre></div>
 <tr><td>其它模型未被领取</td><td>模型名（包括大小写）和思考强度需精确匹配本机登记。不要把展示名称或其它服务的 max / xhigh 等强度直接套用。可从已鉴权的 GET /v1/models 读取登记值；配置更改后空闲时重启加载。</td></tr>
 <tr><td>等待模型回复时没有输出</td><td>当前任务显示第几轮、已用时间和最近活动；API 文件操作在执行阶段显示。回复到达后自动更新，等待时不显示模型内部推理。</td></tr>
 <tr><td>旧对话不匹配</td><td>使用回执完整 UUID，保持同一机器、目标仓库与后端；会话文件必须属于监听器用户。</td></tr>
-<tr><td>stale_base</td><td>默认分支已变化，重新读取基线，发布新 Issue、新 request_id 与新授权。</td></tr>
+<tr><td>stale_base</td><td>main 更新不会仅因基线变化阻止提交 PR。仓库身份、分支或远端冲突会回复原因，可在原 Issue 追加解决指示。</td></tr>
 <tr><td>failed</td><td>读取回执和诊断，核对已有文件；修复原因后创建新任务，不编辑旧授权。</td></tr>
 <tr><td>执行结束仍 running</td><td>查看发布阶段，可能在补做 push、PR 或回执；确认已完成执行的网络发布失败只补发布。</td></tr>
 <tr><td>中断后停止接单</td><td>执行或 commit 不确定时保留进程、文件及状态，先核对现场，不删除数据库或自动重放。</td></tr>
@@ -272,8 +291,8 @@ var repoPattern=new RegExp('^'+v.owner+'/[A-Za-z0-9._-]+$','i');
 if(!repoPattern.test(v.repo)){return '工作仓库必须属于填写的 owner，格式为 owner/仓库名。';}
 if(v.issueAt==='hub'&&!repoPattern.test(v.hub)){return '请填写属于同一 owner 且与本机配置一致的 hub_repo。';}
 if(!v.prompt){return '请填写具体任务要求。';}
-if(!v.paths.length||v.paths.length>32){return '请填写 1 至 32 个允许修改的文件或目录。';}
-var bad=v.paths.some(function(p){var parts=p.replace(/\/$/,'').split('/');return p.length>300||p.startsWith('/')||p.indexOf('\\')!==-1||/[:?*\[\]\u0000-\u001f]/.test(p)||parts.some(function(s){return !s||s==='..'||s==='.'||s.toLowerCase()==='.git'||s.toLowerCase()==='.codex';});});
+if(!v.paths.length){return '请填写允许修改的路径，整仓填写 .';}
+var bad=v.paths.some(function(p){if(['.','./','*','/'].includes(p)){return false;}var parts=p.replace(/\/$/,'').split('/');return p.startsWith('/')||p.indexOf('\\')!==-1||/[:?*\[\]\u0000-\u001f]/.test(p)||parts.some(function(s){return !s||s==='..'||s==='.'||s.toLowerCase()==='.git'||s.toLowerCase()==='.codex';});});
 if(bad){return '请使用明确相对路径，/ 分隔，避开 ..、通配符和保留目录。';}
 if(v.session.mode==='resume'&&!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(v.session.id)){return '继续旧对话时，请填写完整的小写 UUID。';}
 if(v.models.mode!=='api'&&!/^gpt-[A-Za-z0-9._:/-]+$/.test(v.models.primary.model)){return '请填写实际可用的 gpt- 系列型号。';}
@@ -292,6 +311,7 @@ return lines.join('\n');
 }
 function render(){
 var v=current(),error=invalid(v);
+if(!error){var mobile=['/codex run '+v.host,'repo: '+v.repo,'mode: '+v.models.mode,'provider: '+v.models.primary.provider,'model: '+v.models.primary.model,'effort: '+v.models.primary.effort,'paths: '+v.paths.join(', ')];if(v.session.mode==='resume'){mobile.push('session: '+v.session.id);}if(v.models.collaborators){mobile.push('collaborators: '+JSON.stringify(v.models.collaborators));}mobile.push('',v.prompt);$('mobile-template').textContent=mobile.join('\n');}
 $('gpt-fields').hidden=v.models.mode==='api';$('other-fields').hidden=v.models.mode==='gpt';$('session-id-field').hidden=v.session.mode!=='resume';
 $('other-heading').textContent=v.models.mode==='gpt-led'?'GPT 的协作者设置':'其它 API 设置';
 $('form-feedback').textContent=error||'指令已生成。核对后复制给 Chat，由 Chat 读取基线并发布。';$('form-feedback').classList.toggle('error',!!error);

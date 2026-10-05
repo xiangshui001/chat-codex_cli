@@ -5,23 +5,36 @@
       "base_url": "https://api.openai.com/v1",
       "api_key_env": "OPENAI_API_KEY",
       "wire_api": "responses",
-      "models": ["gpt-YOUR_HTTP_MODEL"],
+      "models": [
+        "gpt-YOUR_HTTP_MODEL"
+      ],
       "reasoning_parameter": "reasoning.effort",
-      "effort_map": {"low": "low", "medium": "medium", "high": "high", "xhigh": "xhigh"}
+      "effort_map": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high",
+        "xhigh": "xhigh"
+      }
     },
     "other": {
       "kind": "other",
       "base_url": "https://PROVIDER.example/v1",
       "api_key_env": "OTHER_MODEL_API_KEY",
       "wire_api": "chat_completions",
-      "models": ["OTHER_MODEL"],
+      "models": [
+        "OTHER_MODEL"
+      ],
       "reasoning_parameter": "reasoning_effort",
-      "effort_map": {"low": "low", "medium": "medium", "high": "high"}
+      "effort_map": {
+        "low": "low",
+        "medium": "medium",
+        "high": "high"
+      }
     }
   },
   "max_turns": null,
   "max_calls": null,
-  "request_timeout": 600,
-  "max_output_tokens": 8192,
-  "recovery_max_output_tokens": 32768
+  "request_timeout": null,
+  "max_output_tokens": null,
+  "recovery_max_output_tokens": null
 }

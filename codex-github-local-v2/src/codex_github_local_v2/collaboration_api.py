@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 import hmac
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -13,7 +13,6 @@ from .model_api import Collaboration, CONSULT_TOOL, ModelRegistry
 from .mvp0 import fields, read_json
 from .mvp0_runner import MvpError
 
-MAX_REQUEST = 65536
 
 
 def handler(registry, token):
@@ -54,7 +53,7 @@ def handler(registry, token):
                 self.reply(404, {"error": "not_found"})
 
         def do_POST(self):
-            self.connection.settimeout(10)
+            self.connection.settimeout(None)
             if not self.allowed():
                 return
             if self.path != "/v1/respond":
@@ -62,7 +61,7 @@ def handler(registry, token):
                 return
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                if self.headers.get("Transfer-Encoding") or not 0 < size <= MAX_REQUEST:
+                if self.headers.get("Transfer-Encoding") or size <= 0:
                     self.reply(413, {"error": "invalid_request_size"})
                     return
                 if self.headers.get("Content-Type", "").split(";")[0] != "application/json":
@@ -73,7 +72,7 @@ def handler(registry, token):
                     raise MvpError("incomplete_request")
                 data = read_json(raw.decode())
                 fields(data, {"prompt", "models"})
-                self.connection.settimeout(registry.limits["request_timeout"] + 10)
+                self.connection.settimeout(registry.limits["request_timeout"])
                 result = Collaboration(registry, data["models"]).respond(data["prompt"])
                 self.reply(200, result)
             except MvpError as exc:
@@ -103,17 +102,35 @@ def mcp_dispatch(message, collaboration):
         return {}
     if method == "tools/list":
         return {"tools": [{"name": CONSULT_TOOL["name"], "description": CONSULT_TOOL["description"]
+                          + (" Starts a background consultation; use get_consultation with its job_id for progress/results. No implicit time ceiling." if getattr(collaboration,'async_consultations',False) else '')
                           + " Configured collaborators: " + json.dumps(collaboration.options["collaborators"]),
                           "inputSchema": CONSULT_TOOL["parameters"],
-                          "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True}}]}
+                          "annotations": {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": True}},
+                          {"name":"get_consultation","description":"Get a background collaborator's current status or complete answer. Returns immediately.",
+                           "inputSchema":{"type":"object","properties":{"job_id":{"type":"string"}},"required":["job_id"],"additionalProperties":False},
+                           "annotations":{"readOnlyHint":True,"destructiveHint":False}}]}
     if method == "tools/call":
         try:
             fields(params, {"name", "arguments"}, {"_meta"})
+            if params['name']=='get_consultation':
+                fields(params['arguments'],{'job_id'})
+                result=collaboration.jobs.get(params['arguments']['job_id'],{'error':'consultation_not_found'})
+                return {"content":[{"type":"text","text":json.dumps(result,ensure_ascii=False)}]}
             if params["name"] != "consult_model":
                 raise MvpError("model_tool_not_allowed")
             args = params["arguments"]
             fields(args, {"index", "prompt"})
-            result = collaboration.consult(args["index"], args["prompt"])
+            if getattr(collaboration,'async_consultations',False):
+                import threading
+                import uuid
+                job_id=str(uuid.uuid4())
+                result={'job_id':job_id,'status':'running'}
+                collaboration.jobs[job_id]=result
+                def invoke():
+                    try:collaboration.jobs[job_id]={'job_id':job_id,'status':'completed',**collaboration.consult(args['index'],args['prompt'])}
+                    except Exception as exc:collaboration.jobs[job_id]={'job_id':job_id,'status':'failed','error':str(exc) if isinstance(exc,MvpError) else 'collaboration_failed'}
+                threading.Thread(target=invoke,daemon=True).start()
+            else:result = collaboration.consult(args["index"], args["prompt"])
             return {"content": [{"type": "text", "text": json.dumps(result, ensure_ascii=False)}]}
         except MvpError as exc:
             return {"isError": True, "content": [{"type": "text", "text": str(exc)}]}
@@ -123,10 +140,8 @@ def mcp_dispatch(message, collaboration):
 def serve_stdio(collaboration, stdin=None, stdout=None):
     stdin, stdout = stdin or sys.stdin, stdout or sys.stdout
     while True:
-        line = stdin.readline(MAX_REQUEST + 1)
+        line = stdin.readline()
         if not line:
-            return
-        if len(line.encode()) > MAX_REQUEST:
             return
         msg = None
         try:
@@ -160,6 +175,8 @@ def main(argv=None):
                 raise MvpError("task_options_required")
             options = read_json(args.task_options.read_text(encoding="utf-8"))
             bridge = Collaboration(registry, options)
+            bridge.async_consultations=True
+            bridge.jobs={}
             if options["mode"] != "gpt-led" or options["primary"]["provider"] != "codex":
                 raise MvpError("gpt_led_cli_required")
             serve_stdio(bridge)
@@ -169,7 +186,7 @@ def main(argv=None):
                 raise MvpError("local_api_token_required_min_32_ascii")
             if not 0 <= args.port <= 65535:
                 raise MvpError("invalid_port")
-            with HTTPServer(("127.0.0.1", args.port), handler(registry, token)) as server:
+            with ThreadingHTTPServer(("127.0.0.1", args.port), handler(registry, token)) as server:
                 print("Model collaboration API: http://127.0.0.1:" + str(server.server_port), flush=True)
                 server.serve_forever()
         return 0

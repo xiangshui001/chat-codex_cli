@@ -15,7 +15,6 @@ from .mvp0_runner import MvpError
 from .mvp2_contract import NAME, model_options, selection
 from .api_recovery import ResponseRecovery
 
-MAX_BYTES = 2 * 1024 * 1024
 
 
 class NoRedirect(HTTPRedirectHandler):
@@ -36,13 +35,13 @@ class ModelRegistry:
             if val is not None and (type(val) is not int or val < 1):
                 raise MvpError('invalid_model_limit')
             self.limits[key] = val  # null/omitted: no operation-count limit.
-        for key, default, upper in (("request_timeout", 600, 3600), ("max_output_tokens", 8192, 32768),
-                                    ("recovery_max_output_tokens", 32768, 32768)):
+        for key, default, upper in (("request_timeout", None, None), ("max_output_tokens", None, None),
+                                    ("recovery_max_output_tokens", None, None)):
             val = data.get(key, default)
-            if type(val) is not int or not 1 <= val <= upper:
+            if val is not None and (type(val) is not int or val < 1):
                 raise MvpError("invalid_model_limit")
             self.limits[key] = val
-        if self.limits['recovery_max_output_tokens'] < self.limits['max_output_tokens']:
+        if self.limits['recovery_max_output_tokens'] is not None and self.limits['max_output_tokens'] is not None and self.limits['recovery_max_output_tokens'] < self.limits['max_output_tokens']:
             raise MvpError('invalid_model_limit')
         for name, provider in self.providers.items():
             if not NAME.fullmatch(name) or name == "codex":
@@ -101,6 +100,8 @@ class ModelClient:
     def __init__(self, registry, *, opener=None):
         self.registry = registry
         self.opener = opener or build_opener(NoRedirect())
+        self.context_budgets={}
+        self.unsupported_outputs=set()
 
     def call(self, chosen, history, tools=(), *, timeout=None, max_output_tokens=None):
         provider = self.registry.resolve(chosen)
@@ -110,13 +111,20 @@ class ModelClient:
         responses = provider["wire_api"] == "responses"
         payload = {"model": chosen["model"], "stream": False}
         output_limit = max_output_tokens if max_output_tokens is not None else self.registry.limits['max_output_tokens']
-        if type(output_limit) is not int or not 1 <= output_limit <= self.registry.limits['recovery_max_output_tokens']:
+        if output_limit is not None and (type(output_limit) is not int or output_limit < 1):
             raise MvpError('invalid_model_limit')
         if responses:
-            payload.update(input=history, store=False, include=["reasoning.encrypted_content"],
-                           max_output_tokens=output_limit)
+            payload.update(input=history, store=False, include=["reasoning.encrypted_content"])
+            if output_limit is not None:
+                payload["max_output_tokens"] = output_limit
         else:
-            payload.update(messages=history, max_tokens=output_limit)
+            from .context_window import request_view
+            context_key=(chosen['provider'],chosen['model'])
+            view=request_view(history,self.context_budgets[context_key]) if context_key in self.context_budgets else history
+            payload.update(messages=view)
+            if output_limit is not None:
+                payload["max_tokens"] = output_limit
+            if context_key in self.unsupported_outputs:payload.pop('max_tokens',None)
         mapped = provider["effort_map"][chosen["effort"]]
         if mapped is not None:
             obj = payload
@@ -129,24 +137,33 @@ class ModelClient:
         url = provider["base_url"].rstrip("/") + ("/responses" if responses else "/chat/completions")
         request = Request(url, data=json.dumps(payload, ensure_ascii=False).encode(),
                           headers={"Authorization": "Bearer " + key, "Content-Type": "application/json"}, method="POST")
-        deadline = min(timeout if timeout is not None else self.registry.limits["request_timeout"], self.registry.limits["request_timeout"])
-        if deadline <= 0:
+        values = [v for v in (timeout, self.registry.limits["request_timeout"]) if v is not None and v != float("inf")]
+        deadline = min(values) if values else None
+        if deadline is not None and deadline <= 0:
             raise MvpError("execution_timeout")
         try:
             with self.opener.open(request, timeout=deadline) as response:
-                raw = response.read(MAX_BYTES + 1)
-            if len(raw) > MAX_BYTES:
-                raise MvpError("model_response_too_large")
+                raw = response.read()
             data = read_json(raw.decode("utf-8"))
         except HTTPError as exc:
-            raise MvpError("model_http_" + str(exc.code)) from None
+            error=MvpError("model_http_" + str(exc.code))
+            error.diagnostic=exc.read().decode('utf-8',errors='replace')
+            diagnostic=error.diagnostic.lower()
+            if not responses and exc.code in {400,413,422}:
+                if any(term in diagnostic for term in ('context_length_exceeded','maximum context length','context window','too many tokens','context too long','input tokens exceed')):
+                    self.context_budgets[context_key]=max(1,len(json.dumps(payload['messages'],ensure_ascii=False))//2)
+                    error=MvpError('model_context_window_full')
+                elif 'max_tokens' in diagnostic and any(term in diagnostic for term in ('unsupported','maximum','exceed','not supported')):
+                    self.unsupported_outputs.add(context_key)
+                    error=MvpError('model_output_parameter_rejected')
+            raise error from None
         except TimeoutError:
             raise MvpError('model_request_timeout') from None
         except URLError as exc:
             raise MvpError('model_request_timeout' if isinstance(exc.reason, TimeoutError) else 'model_transport_failed') from None
         except (OSError, UnicodeError, ValueError) as exc:
             raise MvpError("model_transport_failed") from None
-        # No retry: a lost response may already have incurred a bill or produced a tool call.
+        # Recovery issues a continuation; only fully received tool calls can run locally.
         if not isinstance(data, dict) or data.get("error"):
             raise MvpError("invalid_model_response")
         if responses:
@@ -219,19 +236,21 @@ class Collaboration:
         self.registry, self.options = registry, registry.validate(options, cli=options["primary"]["provider"] == "codex")
         self.client, self.record = client or ModelClient(registry), record
         self.calls = 0
+        self.jobs={}
+        self.async_consultations=False
 
     def consult(self, index, prompt, *, timeout=None):
         if type(index) is not int or not 0 <= index < len(self.options["collaborators"]):
             raise MvpError("collaborator_not_allowed")
-        prompt = text(prompt, 24000, "invalid_consultation_prompt")
+        prompt = text(prompt, None, "invalid_consultation_prompt")
         limit = self.registry.limits['max_calls']
         if limit is not None and self.calls >= limit:
             raise MvpError("collaboration_call_limit")
         self.calls += 1
         chosen = self.options["collaborators"][index]
         history = [{"role": "user", "content": prompt}]
-        deadline = time.monotonic() + min(timeout if timeout is not None else self.registry.limits['request_timeout'],
-                                          self.registry.limits['request_timeout'])
+        values = [v for v in (timeout, self.registry.limits['request_timeout']) if v is not None and v != float('inf')]
+        deadline = time.monotonic() + min(values) if values else float('inf')
         recovery = ResponseRecovery(self.registry, self.record)
         turns = 0
         limit = self.registry.limits['max_turns']
@@ -243,14 +262,14 @@ class Collaboration:
             if result['calls']:
                 raise MvpError('invalid_consultation_response')
             self.record("model_consulted", {**chosen, "index": index})
-            return {"model": chosen["model"], "text": result["text"][:24000]}
+            return {"model": chosen["model"], "text": result["text"]}
         raise MvpError('model_turn_limit')
 
     def respond(self, prompt):
-        prompt = text(prompt, 24000, "invalid_prompt")
+        prompt = text(prompt, None, "invalid_prompt")
         history = [{"role": "system", "content": "You lead this task. External model replies are advice; decide and synthesize the final answer yourself."},
                    {"role": "user", "content": prompt}]
-        deadline = time.monotonic() + self.registry.limits["request_timeout"]
+        deadline = time.monotonic() + self.registry.limits["request_timeout"] if self.registry.limits["request_timeout"] is not None else float("inf")
         tools = [CONSULT_TOOL] if self.options["mode"] == "gpt-led" else []
         turns = 0
         limit = self.registry.limits['max_turns']

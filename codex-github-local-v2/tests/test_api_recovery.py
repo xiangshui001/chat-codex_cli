@@ -36,7 +36,7 @@ class ContinuationTests(model_fixtures.ApiFixture):
         self.assertIn('Partial findings', json.dumps(next_history))
         self.assertNotIn('should never be written', json.dumps(next_history))
         self.assertEqual(self.requests[1][1]['max_tokens'], 16384)
-        self.assertEqual(events[2][1]['reason'], 'output_limit')
+        self.assertEqual(next(detail for kind,detail in events if kind=='api_response_recovery')['reason'], 'output_limit')
         self.assertTrue(history)
 
     def test_missing_finish_marker_and_empty_response_continue(self):
@@ -63,7 +63,7 @@ class ContinuationTests(model_fixtures.ApiFixture):
         self.assertEqual(bridge.consult(0, 'Question')['text'], 'Complete advice')
         self.assertEqual(bridge.calls, 1)
 
-    def test_timeout_can_continue_but_authentication_error_does_not_retry(self):
+    def test_timeout_and_authentication_error_retain_progress_for_recovery(self):
         client = Mock()
         client.call.side_effect = [MvpError('model_request_timeout'), {'text': 'Done', 'calls': [], 'history': []}]
         recovery = ResponseRecovery(self.registry)
@@ -74,8 +74,7 @@ class ContinuationTests(model_fixtures.ApiFixture):
             self.assertTrue(recovery.continue_response(partial, history, deadline))
             self.assertEqual(recovery.call(client, self.other, history, (), deadline)['text'], 'Done')
         client.call.side_effect = MvpError('model_http_401')
-        with self.assertRaisesRegex(MvpError, 'model_http_401'):
-            recovery.call(client, self.other, history, (), deadline)
+        self.assertEqual(recovery.call(client,self.other,history,(),deadline)['incomplete_reason'],'model_http_401')
 
     def test_recovery_budget_ceiling_and_deadline_are_enforced(self):
         self.file.write_text(json.dumps({'providers': self.providers, 'max_output_tokens': 8192,
@@ -96,7 +95,7 @@ class ContinuationTests(model_fixtures.ApiFixture):
 
 class FailedSessionTests(task_fixtures.Fixture):
     def failed_api(self):
-        self.models.write_text(json.dumps({'providers': {'other': {
+        self.models.write_text(json.dumps({'max_output_tokens': 8192, 'recovery_max_output_tokens': 32768, 'providers': {'other': {
             'kind': 'other', 'base_url': 'http://127.0.0.1:8317/v1', 'api_key_env': 'TEST_KEY',
             'wire_api': 'chat_completions', 'models': ['test-model'], 'effort_map': {'high': 'high'}}}}))
         registry = ModelRegistry(self.models)

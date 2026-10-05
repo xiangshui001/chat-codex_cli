@@ -269,12 +269,13 @@ class PollerTests(Fixture):
 
     def test_crashed_execution_and_uncertain_commit_never_replayed(self):
         ident = self.s.claim_desktop(self.source, self.target, self.issue, self.parse(), {})
-        with self.assertRaisesRegex(MvpError, 'manual_inspection'):
-            self.p.once()
+        self.p.once()
+        self.assertEqual(self.s.get(ident)['error'],'execution_state_unknown')
+        self.s.db.execute("UPDATE tasks SET state='running' WHERE id=?",(ident,))
         self.s.completed_execution(ident)
         self.s.publication(ident, publication_state='committing')
-        with self.assertRaisesRegex(MvpError, 'manual_inspection'):
-            self.p.once()
+        self.p.once()
+        self.pub.publish.assert_called_once()
         self.runner.run.assert_not_called()
 
     def test_contract_changed_before_claim(self):
@@ -307,7 +308,7 @@ class ToolAndSessionTests(Fixture):
         for name in ['../x', '.git/config', '.env', 'auth.json', 'outside.txt']:
             with self.subTest(name=name), self.assertRaises(MvpError):
                 tools.call('write_file', {'path': name, 'content': 'bad'})
-        with self.assertRaisesRegex(MvpError, 'not_allowed'):
+        with self.assertRaisesRegex(MvpError, 'invalid_fields'):
             tools.call('run_command', {'command': 'echo arbitrary'})
 
     @unittest.skipIf(os.name != 'posix', 'POSIX symlink')
@@ -331,15 +332,16 @@ class ToolAndSessionTests(Fixture):
         registry = Mock(limits={'request_timeout': 10})
         with patch('codex_github_local_v2.mvp0_runner.subprocess.run', return_value=Mock(stdout='codex 0.160.0')):
             meta = runner.prepare_task(self.root, self.parse(), self.config, registry, self.root/'options.json')
-            self.assertIn('gpt-5.4', meta['argv'])
+            self.assertEqual(meta['model'], 'gpt-5.4')
+            self.assertIn('app-server', meta['argv'])
             self.assertIn('model_reasoning_effort="high"', meta['argv'])
             self.assertNotIn('resume', meta['argv'])
             with patch('codex_github_local_v2.mvp2_runner.validate_cli_session'):
                 resumed = runner.prepare_task(self.root, replace(self.parse(), session={'mode': 'resume', 'id': SID}),
                                               self.config, registry, self.root/'options.json')
-            self.assertIn(SID, resumed['argv'])
+            self.assertEqual(resumed['session_id'], SID)
             self.assertNotIn('--last', resumed['argv'])
-            self.assertIn('resume', resumed['argv'])
+            self.assertEqual(resumed['transport'], 'app_server')
 
     def test_cli_collaboration_forwards_only_selected_key_names(self):
         task = replace(self.parse(), models={**self.parse().models, 'mode': 'gpt-led',
@@ -393,7 +395,7 @@ class PublisherTests(Fixture):
 
     def test_commit_push_and_draft_pr_and_reconciliation(self):
         (self.workspace / 'docs').mkdir(); (self.workspace / 'docs/check.txt').write_text('output')
-        with patch('codex_github_local_v2.mvp2.run_git', side_effect=self.transport):
+        with patch('codex_github_local_v2.remote_git.run_remote_git', side_effect=self.transport):
             self.assertEqual(self.pub.publish(self.ident), 'https://github.com/owner/project/pull/5')
             commit = self.s.delivery(self.ident)['commit_sha']
             self.assertNotEqual(commit, self.base)
@@ -410,7 +412,7 @@ class PublisherTests(Fixture):
 
     def test_out_of_scope_not_staged_or_pushed(self):
         (self.workspace / 'private.txt').write_text('unauthorized')
-        with patch('codex_github_local_v2.mvp2.run_git', side_effect=self.transport), self.assertRaisesRegex(MvpError, 'scope_violation'):
+        with patch('codex_github_local_v2.remote_git.run_remote_git', side_effect=self.transport), self.assertRaisesRegex(MvpError, 'scope_violation'):
             self.pub.publish(self.ident)
         self.assertEqual(self.git('rev-parse', 'HEAD'), self.base)
         self.assertEqual(self.pushes, 0)
@@ -419,6 +421,50 @@ class PublisherTests(Fixture):
         self.assertIsNone(self.pub.publish(self.ident))
         self.client.api.assert_not_called()
         self.assertEqual(self.s.delivery(self.ident)['publication_state'], 'no_changes')
+
+    def test_main_advance_does_not_reject_valid_frozen_branch(self):
+        self.gh.check_base.side_effect=MvpError('stale_base')
+        (self.workspace/'docs').mkdir();(self.workspace/'docs/check.txt').write_text('output')
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            self.pub.publish(self.ident)
+        self.gh.check_base.assert_not_called()
+
+    def test_model_local_commit_is_published_after_ancestry_and_scope_checks(self):
+        (self.workspace/'docs').mkdir();(self.workspace/'docs/check.txt').write_text('output')
+        self.git('add','docs/check.txt');self.git('commit','-m','model local change')
+        commit=self.git('rev-parse','HEAD')
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            self.pub.publish(self.ident)
+        self.assertEqual(self.s.delivery(self.ident)['commit_sha'],commit)
+        self.assertEqual(self.pushes,1)
+
+    def test_same_issue_followup_fast_forwards_existing_pr_without_editing_frozen_base(self):
+        (self.workspace/'docs').mkdir();(self.workspace/'docs/check.txt').write_text('first')
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            self.pub.publish(self.ident)
+            first=self.s.delivery(self.ident)['commit_sha']
+            self.s.finish(self.ident,'succeeded',0,None,True,'done')
+            self.s.reopen(self.ident,'owner_followup')
+            (self.workspace/'docs/check.txt').write_text('second')
+            self.s.completed_execution(self.ident)
+            self.client.pages.side_effect=lambda *_:[{'state':'open','html_url':'https://github.com/owner/project/pull/5','head':{'sha':self.git('rev-parse','HEAD')},'base':{'ref':'main'}}]
+            self.pub.publish(self.ident)
+        second=self.s.delivery(self.ident)['commit_sha']
+        self.assertNotEqual(first,second)
+        self.assertEqual(self.git('rev-parse','HEAD^'),first)
+        self.assertEqual(self.s.get(self.ident)['base_sha'],self.base)
+        self.assertEqual(self.pushes,2)
+        self.client.api.assert_called_once()
+
+    def test_unknown_commit_result_is_reconciled_without_duplicate_commit(self):
+        (self.workspace/'docs').mkdir();(self.workspace/'docs/check.txt').write_text('output')
+        self.s.publication(self.ident,publication_state='committing')
+        self.git('add','docs/check.txt');self.git('commit','-m','Codex task '+RID)
+        commit=self.git('rev-parse','HEAD')
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            self.pub.publish(self.ident)
+        self.assertEqual(self.git('rev-parse','HEAD'),commit)
+        self.assertEqual(self.s.delivery(self.ident)['commit_sha'],commit)
 
 
 if __name__ == '__main__':
