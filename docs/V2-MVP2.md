@@ -1,165 +1,127 @@
-# 当前协议：指定对话、模型协作、机器路由与 PR
+# 当前协议：手机派单、持续对话与成果交付
 
-V2 **0.1.0（MVP-2）** 是 main 的当前版本。默认命令 `codex-github-local-v2`，`codex-github-local-v2-mvp2` 为同一入口的兼容别名。旧源码和阶段说明已归档到 history。首次部署见[安装说明](安装说明.md)和[HTML 指南](使用指南.html)。新协议为 `[codex-v2-mvp2]` 和 `/codex-v2-mvp2 run`，当前执行数据库为 schema 4 的 `mvp2.sqlite3`。schema 3 可显式原地迁移；其它旧协议数据库不导入、覆盖或自动重放。
+V2 **0.2.0（MVP-2，engine schema 5）** 是当前版本。默认命令 `codex-github-local-v2`，`codex-github-local-v2-mvp2` 是兼容别名。旧版本资料保留在 history。首次部署见[安装说明](安装说明.md)，离线操作说明见[HTML 指南](使用指南.html)。
 
-## 安装与账号监听
+## 手机直接派单
 
-在 Linux / WSL 安装 Python 3.11+、已登录的 `gh` 和 `codex`。`gh api user --jq .login` 必须与 owner 相同。参考配置见 [mvp2-config.example.json](../codex-github-local-v2/examples/mvp2-config.example.json) 和 [models.example.json](../codex-github-local-v2/examples/models.example.json)。实际配置、凭据和模型日志保存在仓库外。
+在工作仓库新建 Issue，正文这样写，标题可自行命名：
 
-```bash
-python3 -m venv /ABS/PRIVATE/mvp2-venv
-/ABS/PRIVATE/mvp2-venv/bin/pip install ./codex-github-local-v2
-/ABS/PRIVATE/mvp2-venv/bin/codex-github-local-v2 --config /ABS/PRIVATE/config.json --list-repos
-/ABS/PRIVATE/mvp2-venv/bin/codex-github-local-v2 --config /ABS/PRIVATE/config.json
+```text
+/codex run desktop
+model: gpt-6.1-sol
+effort: high
+paths: .
+
+这里写具体任务。完成后保存文件，提交 PR，并把结果回复到这个 Issue。
 ```
 
-配置 `owner` 为本人账号，各电脑使用唯一 `host_id`，例如 **desktop**、**laptop**；任务必须精确匹配它。每轮完整分页扫描凭据可见的本人仓库；排除组织、协作者、归档、禁用或未开启 Issues 的仓库。新仓库无需登记，先有初始提交即可。所有仓库共用本机并发名额。GitHub 连接与执行端 gh 的授权分别配置，程序不自动提升权限。
+`desktop` 换成目标电脑的唯一 `host_id`。型号与思考强度按执行机实际能力填写。省略头部配置时使用 GPT、`gpt-6.1-sol`、`medium`、新对话、整个仓库。电脑自动生成任务编号并冻结领取时的默认分支 SHA，无需手机填写 UUID 或 SHA。Issue 和后续指示必须来自配置的 owner。
 
-## 并发配置与升级
+Issue 可以发布在目标仓库，也可发布在本机 `hub_repo`（例如 `OWNER/codex-cli`）；在记录仓库派单时增加 `repo: OWNER/PROJECT`。监听本人拥有且凭据可见、启用 Issues、未归档的全部仓库。目标仓库需有初始提交。
 
-在私有 config.json 设置 `"max_parallel_tasks": 3`，允许 1–16 的整数；省略时为 1，保留已有串行行为。新安装示例设为 3。它只限制同时执行的任务数，不限制一个任务内的模型操作次数。重启监听器后生效。名额满时其余 Issue 留在 GitHub，下一轮自动检查；无效参数和已失败任务不会自动重跑。
+可选头部：`repo`、`mode`、`provider`、`model`、`effort`、`session`、`paths`、`collaborators`。只解析任务文字前的头部。`session: new` 创建对话，或填明确会话 UUID；路径用逗号分隔，目录以 `/` 结尾。`paths: .` 允许整仓；`./`、`*`、`/` 在范围字段也归一成整仓。外部模型需显式提供本机登记的 provider/model/effort：
 
-同一个旧会话一次只能运行一个任务，避免上下文覆盖；同一仓库的不同对话可在独立克隆与分支中并行。监听器持续扫描，工作台列出所有正在执行的任务、型号和最近活动。并发可能提高模型服务负载，遇到上游限流不会自动重发付费请求。
+```text
+/codex run desktop
+mode: api
+provider: other
+model: OTHER_MODEL
+effort: high
+paths: docs/review-report.md
 
-已有 schema 3 用户：先等待当前任务完成，停止监听器；保留原配置、状态和成果目录，在已安装新代码的环境中执行：
-
-```bash
-codex-github-local-v2 --config /ABS/PRIVATE/config.json --migrate-state
+审查整个仓库，把问题、位置、严重程度和建议写入报告并提交 PR。
 ```
 
-该命令持有控制器锁，先备份 SQLite，再将执行数据库升级至 schema 4；拒绝迁移未结束的任务，不修改原任务、授权或会话记录。桥接核心数据库不迁移。旧程序不支持 schema 4，回退代码时应保留新状态并使用升级前备份，不能把新运行记录自动重放到旧库。新版工作台只读兼容 schema 3 和 4。
+GPT 主导模式增加 `mode: gpt-led` 与一行 JSON，例如 `collaborators: [{"provider":"other","model":"OTHER_MODEL","effort":"medium"}]`。接口地址与密钥在本机配置，不能放入 Issue。
 
-worker 意外退出后，已完成且提交结果确定的任务只补做发布；执行/进程清理或 commit 不确定时暂停新领取，现有正常 worker 可以完成，未知任务不自动重跑。
+## 同一个 Issue 继续交谈
 
-`hub_repo` 是本机任务记录仓库，例如 `OWNER/codex-cli`。任务 Issue 可位于工作目标仓库，或 hub_repo；授权中的 `repo` 始终是**实际工作目标**。基线、克隆、commit 和 PR 针对目标仓库；回执返回原 Issue。其它本人仓库不能用来代发对第三个仓库的任务。
+电脑领取后立即提交领取回执，记录机器、型号与思考强度。后续直接在原 Issue 评论，电脑会确认收到，并送入原对话。运行几小时后仍可追加要求。完成后继续评论也会使用同一目录和对话开启下一轮，原任务/授权和上一轮结果快照保留。
 
-## 派单格式
+| 留言 | 行为 |
+|---|---|
+| 任意任务文字，或 `/codex say 新指示` | 运行中追加到原对话；完成/失败后从保留的现场继续 |
+| `/codex status`，或单独留言“进度” | 回复当前阶段、最近活动、模型和 PR；不调用模型，不重跑任务 |
+| `/codex retry` | 在原目录、原对话续跑；不会重新复制一份任务 |
+| `/codex allow .` | 明确扩大到整个仓库；也可逐行列出新增相对路径 |
+| `/codex stop` | 停止当前模型、命令或 Git 操作，清理进程并保留文件/对话 |
+| `/codex merge` | 将当前成果 PR 转为可合并并尝试合并；冲突/检查/保护状态会回复 Issue |
 
-### API 不完整回复与失败会话恢复
+只接收 owner 的新评论，其他人不能指挥电脑。控制器自己的回执不会被当成新任务；重复读取不重复应用。同一对话串行，其它对话并行。回复使用持久化发件箱，GitHub 暂时故障后继续补发，未知 POST 结果先核对，避免重复回执。
 
-API 的截断、缺少完成标记、空回复、可恢复的格式错误或连接中断不再立即终止任务。保留已完成对话与工具结果，下一次请求要求继续；不执行不完整回复中的任何工具调用，要求模型重新给出完整指令，避免重复已成功操作。单次输出截断时，将预算逐步提高到 models.json 的 `recovery_max_output_tokens`（默认 32768，可设不低于 `max_output_tokens` 的值）；反复空回复逐步退避，最长每次等待 30 秒。恢复仍受任务总时限、上下文大小和用户自设有限轮数约束。鉴权错误、服务拒绝、内容过滤或超出授权路径不通过续写绕过。工作台记录恢复原因和新的输出预算，不公开原始模型内容。
+默认每 15 分钟把结构化进度回写 Issue，`progress_seconds` 可调整。手机随时查进度，无需打开仅本机可用的 127.0.0.1 工作台。评论检查间隔由 `poll_seconds` 决定；电脑须开机、联网且监听器正在运行。
 
-用户明确要求继续某个已失败 API 任务时，先停止监听器，执行：
+## 时长、数据与工具
 
-```bash
-codex-github-local-v2 --config /ABS/PRIVATE/config.json --recover-api-session ORIGINAL_REQUEST_UUID
-```
+当前默认没有任务时长、Git 操作时长、单次模型请求时长、日志大小、上下文文件大小、模型响应正文大小或本机输出 token 预算上限。`timeout_seconds`、models.json 的 `request_timeout`、`max_output_tokens`、`recovery_max_output_tokens`、`max_turns`、`max_calls` 设为 `null` 表示不设该预算；省略时同样不设。可自行设置正整数，不设程序规定的最大值。已有显式预算不会被静默覆盖，升级时按需要改为 null。
 
-此命令只登记保留的上下文并返回 session_id，不执行旧任务、不修改旧授权、任务或交付记录。校验失败状态、本机/仓库/后端绑定、协议、会话元数据、私有上下文大小和完整工具结果序列；进程清理结果不确定的任务不允许恢复。随后按当前 main 基线发布新 Issue、新 request_id，使用 `session.mode: resume` 和返回的 session_id。新任务继续原对话，但不自动复制旧工作区未合并文件；如果旧任务已有必要成果，应先按用户授权处理它们。
+API 提供 `list_files`（offset/limit 分页）、`read_file`（字节 offset/length，UTF-8 或 base64）、`write_file`（完整写入或 append 分块）、`delete_file`、`run_command`（argv 数组、cwd、可选自定 timeout）、`read_command_output`。文件数量、单次读写大小及协作模型数量不再有固定上限。包含隐藏目录和依赖目录；跳过 `.git` 与符号链接目录以避免环路。仓库内密钥文件不再有专门禁止访问名单；请在任务中明确需要的工作范围，控制器发送公开回复前会遮盖常见凭据格式。
 
-Issue 标题以 `[codex-v2-mvp2]` 开头，Issue 和唯一授权评论均由 owner 发布。评论第一行必须为 `/codex-v2-mvp2 run`，评论不能编辑。
+命令输出直接写本机文件，返回预览与 command_id；完整输出可分段读取，预览截断不终止命令。工作台分页和 GitHub 评论拆分也只控制显示，不限制任务数据。大数据仍受本机磁盘/内存、模型服务商的上下文与输出容量影响。
 
-````text
-/codex-v2-mvp2 run
-```json
-{
-  "request_id": "6c9134d1-f6ae-49f3-bdfd-e3681c19e183",
-  "host_id": "desktop",
-  "repo": "OWNER/PROJECT",
-  "base_sha": "0123456789abcdef0123456789abcdef01234567",
-  "session": {"mode": "new"},
-  "models": {
-    "mode": "gpt",
-    "primary": {"provider": "codex", "model": "gpt-6.1-sol", "effort": "high"}
-  },
-  "task": {
-    "prompt": "新增 docs/check.txt，写入指定内容。",
-    "write_paths": ["docs/check.txt"]
-  }
-}
-```
-````
+API 截断、空回复、缺少完成标记、传输故障、429/5xx 会保留历史并退避续写；不执行截断工具指令。400/401/403/404 等服务拒绝会保留现场并持续等待重试，同时在 Issue 提示鉴权、模型或参数问题；它们不会因重试次数耗尽而取消，恢复需上游可用或配置修正。内容过滤、用户明确停止仍会结束当前轮。没有宣称本机设置能够取消服务商限制。
 
-示例 UUID、SHA、仓库与模型须换成实际值。`base_sha` 是派单时**目标仓库默认分支**的完整 40 位小写 SHA。领取前重新读取 Issue、授权评论和仓库身份；执行前后检查默认分支和基线。`host_id` 严格区分大小写，不匹配即不领取。`desktop` 是机器标识，与模型型号无关。
-
-沿用明确相对路径、目录 `/` 后缀、拒绝绝对路径、`..`、`.git`、`.codex` 与通配符的规则。Issue 不能指定接口地址、密钥、环境变量、cwd 或 CLI 参数。
+上下文在每次模型回复和工具结果后原子保存，完整历史不因大小被丢弃。已确认工具结果有独立记录；崩溃时未确认的命令/追加写入由模型先核对现有现场，避免盲目重复副作用。
 
 ## 新对话与续接
 
-新对话：`"session": {"mode": "new"}`。CLI 新建持久化会话，回执和工作台返回实际 `session_id`。
+GPT 使用已安装 Codex CLI 的 **app-server**，通过 `thread/start` / `thread/resume` 与 `turn/start` / `turn/steer` 保持对话并接收运行中指示。只接受明确会话 UUID，不使用 `--last`。旧对话须存在本机且绑定目标仓库、电脑、后端；不同 API 协议不能混用历史。新任务独立克隆，原 Issue 的后续轮则复用原工作目录。
 
-旧对话：`"session": {"mode": "resume", "id": "完整会话 UUID"}`。GPT 模式使用 `codex exec resume <UUID>`。只接受明确 UUID，不使用 `--last`，避免续错电脑或仓库的对话。已有会话绑定 Host、目标仓库 ID 和执行后端；其它 API 模式续接本机保存的消息历史。API 会话不能当作 Codex 会话使用，也不能切换 provider 后重放不兼容的消息格式。
-
-允许导入本机已有的 Codex CLI 对话：UUID 必须在该执行用户的 `CODEX_HOME` 中有有效 rollout，原工作目录的 Git origin 必须与目标仓库一致。不存在或来源不匹配时拒绝，不悄悄创建新对话。新任务依然使用独立克隆与当前基线；**续接的是对话上下文，不是旧目录未提交的代码**。GPT 本轮的路径权限以新任务为准。
+连接或轮次临时失败会退避后在原 thread 继续。监听器重启先验证 worker 身份；仍在运行的 worker 不重复启动，已退出 worker 的任务在清理已确认归属的遗留进程后恢复。升级前遗留、缺少可确认执行记录的任务只暂停自身，在 Issue 提示 `/codex retry`；不冻结其它任务。
 
 ## 三种模型模式
 
-| mode | primary | 行为 |
-|---|---|---|
-| `gpt` | `provider: codex`，指定 GPT 型号与 effort | 本机已登录 Codex CLI 执行，仅使用指定 GPT；本轮不挂接其它模型 MCP |
-| `api` | 本机登记的 `kind: other` provider | 直接调用兼容 API；文件工具读取/写入/删除授权路径；不启动 Codex、不调用 GPT |
-| `gpt-led` | `provider: codex`，指定 GPT 型号与 effort | GPT 主导执行，通过本轮专属 MCP `consult_model` 工具选择外部模型并提问，评估结果后自行实现 |
+| mode | 执行 |
+|---|---|
+| `gpt` | 本机 Codex 登录，指定 GPT 型号与 effort |
+| `api` | 本机登记的 `kind: other` OpenAI 兼容 API，操作文件并执行命令/测试 |
+| `gpt-led` | GPT 主导，调用任务专属 MCP 顾问，评估回复并实现 |
 
-其它模型示例：
+GPT 主导的 `consult_model` 启动后台咨询并返回 job_id，`get_consultation` 立即返回状态/结果，因此外部模型长时间思考不会被单次 MCP 工具等待截断。外部顾问仅收到 GPT 提交的问题，不直接获得文件工具。协作调用配置不含真实密钥。
 
-```json
-{"mode": "api", "primary": {"provider": "other", "model": "OTHER_MODEL", "effort": "high"}}
+provider 的 `base_url`、`api_key_env`、`wire_api`、`models`、`reasoning_parameter` 和 `effort_map` 见[模型示例](../codex-github-local-v2/examples/models.example.json)。`wire_api` 支持 `chat_completions` 与 `responses`。effort_map 值为 null 表示该模式不发送思考参数；模型名和 effort 必须按本机登记值精确填写。更改配置/密钥环境后重启服务；已领取的原始快照保留，owner 发起的新续跑轮单独冻结当前模型配置。
+
+## 并发配置与升级
+
+`max_parallel_tasks` 新安装示例为 3，省略为 1，可设任意正整数，实际并发取决于电脑与账号。每个任务有独立进程、目录、分支；同一会话排队，不丢弃指示。`full_access: true` 让 Codex 使用完整本机权限；省略/false 使用 workspace-write。公开示例不包含任何用户的真实账号或密钥。`auto_merge` 默认 false；可设 true 自动尝试合并，或从手机发送 `/codex merge`。
+
+0.1.0 的 schema 3/4 升级前等待监听器空闲、停止服务并备份运行目录，在现有虚拟环境安装 0.2.0，再运行：
+
+```bash
+"$run_dir/venv/bin/python" -m pip install --upgrade ./codex-github-local-v2
+"$run_dir/venv/bin/codex-github-local-v2" --config "$run_dir/config.json" --migrate-state
 ```
 
-GPT 主导示例：
+迁移命令持有控制器锁，先备份 SQLite，再升级 schema 5；保留原任务、授权、会话、成果，新建 Issue 收件/回执/续跑历史表。拒绝对运行中的旧引擎迁移。然后按上文取消私有配置的旧预算并重启服务。工作台只读兼容 schema 3/4/5。历史任务的旧评论不会在升级时被当成新指示。回退旧代码需使用迁移前备份，不把新事件重放到旧数据库。
+
+## 权限、仓库与成果发布
+
+保留 owner 身份、目标仓库归属和 host_id 路由，避免陌生人或另一台电脑领取任务。只使用目标仓库内相对路径，拒绝 `..`、绝对路径和越界符号链接；仓库内符号链接可正常使用。`.git`/`.codex` 不作为文件工具的普通任务路径，Git 操作通过命令和控制器完成。范围使用 `.` 后不会因文件数、路径条数或路径长度的人为上限拒绝。
+
+允许在当前任务分支执行命令、测试和本地提交；发布核对仓库身份、分支、提交为冻结基线的后代及整段变更范围。main 在任务执行期间更新不会导致 `stale_base` 阻断；PR 正常以领取的基线创建。不会强推覆盖无关远端分支。外部修改/冲突会在 Issue 报告；owner 可追加解决指示。PR 创建/回执暂时失败只补做发布，不重新调用模型。提交响应不确定时核对已生成提交再继续，不丢弃成果。
+
+目录为 `workspace_root/<目标仓库 ID>/<request_id>/`，分支 `codex-mvp2/<host_id>/<request_id>`。完成后保存本地成果、推送分支、创建草稿 PR 并回复原 Issue；无改动时不创建空 PR。同一 Issue 新一轮可继续更新未合并的 PR；旧 PR 已合并后有新成果会创建新 PR。合并遵守 GitHub 的分支保护与检查。
+
+## 兼容的完整授权格式
+
+原 `[codex-v2-mvp2]` 标题与 owner 唯一未编辑 `/codex-v2-mvp2 run` 授权评论仍支持。JSON 顶层字段为 request_id、host_id、repo、base_sha、session、models、task；task 含 prompt 与 write_paths。手机新用户可直接用正文派单。
 
 ```json
-{
-  "mode": "gpt-led",
-  "primary": {"provider": "codex", "model": "gpt-6.1-sol", "effort": "high"},
-  "collaborators": [
-    {"provider": "other", "model": "OTHER_MODEL", "effort": "medium"}
-  ]
-}
+{"request_id":"6c9134d1-f6ae-49f3-bdfd-e3681c19e183","host_id":"desktop","repo":"OWNER/PROJECT","base_sha":"0123456789abcdef0123456789abcdef01234567","session":{"mode":"new"},"models":{"mode":"gpt","primary":{"provider":"codex","model":"gpt-6.1-sol","effort":"high"}},"task":{"prompt":"完成明确的仓库任务并提交 PR","write_paths":["."]}}
 ```
 
-模型列表、`base_url`、密钥环境变量名、协议与 effort 映射由本机 models.json 登记。更改配置或密钥环境后重启监听器和模型 API；已经领取的任务仍使用冻结快照。第三方默认 `chat_completions`；官方 OpenAI HTTP 接口用 `responses`，保留 function call 与 reasoning 输出项用于后续工具调用。不同服务的思考参数可通过 `reasoning_parameter` 和 `effort_map` 映射。只有登记的 effort 才可选择；映射为 null 表示本机明确选择不发送该参数，程序不会擅自降档。
-
-GPT CLI 使用既有登录，不需要 OpenAI API key。HTTP 的 GPT 模式需独立 OpenAI API key。`OTHER_MODEL_API_KEY` 等真实值由运行服务的环境提供；JSON 仅保存变量名。每轮保存无密钥配置快照。缺少密钥、未知 provider/模型或 effort 时在执行前拒绝。
-
-协作者只获得 GPT 明确提交的问题；它们作为顾问返回回答，不能直接获得文件工具或控制 PR。GPT 决定是否调用和调用次数，并承担最终判断；外部调用上限由本机 `max_calls` 配置。其它模型单独执行时提供受路径约束的文件工具，不提供任意 shell；其最终回答不代表测试已运行。CLI sandbox 与事后 Git 检查保留，文件路径约束不是完整容器隔离。
+旧授权不能通过编辑改变已冻结任务；新要求通过原 Issue 的新评论进入收件箱。授权过多、账号/仓库不匹配或未知型号会在领取前拒绝并回写原因，修正未领取手机派单正文后自动重新检查。
 
 ## 本机 HTTP API
 
-### API 仓库任务的轮数
-
-models.json 的 max_turns 和 max_calls 默认 null，表示不设模型回复轮数和协作调用次数上限；API 文件工具也不设每轮操作次数上限。模型可以继续探索并写出交付物。需要自行设预算时可配置正整数，有限轮数下最后三轮会提醒交付。整仓审查应在报告中明确实际覆盖范围，未检查的部分不能声称已审查。仍受总执行时限和上下文大小限制。默认单次请求超时为 600 秒，可配置至 3600 秒；超时报告 model_request_timeout，不自动重试付费请求。
-
-已有配置中的显式 max_turns / max_calls 不会被升级覆盖，取消次数限制需本机设为 null，再重启监听器和模型 API；已领取任务的冻结配置保持原样。有限预算耗尽仍报告 model_turn_limit，不将未完成任务当作成功。失败任务保留受大小限制的私有 context.json 和轮数诊断，不登记为可恢复会话、不自动重跑。核对后可用新的 request_id 和当前 main 基线发布新任务。
-
 ```bash
-export CODEX_COLLABORATION_TOKEN='<至少 32 个 ASCII 字符的随机本机令牌>'
-# 同时在当前进程环境设置各 provider 所需的 API key
-/ABS/PRIVATE/mvp2-venv/bin/codex-github-local-v2-model-api \
-  --models-file /ABS/PRIVATE/models.json --port 8792
+codex-github-local-v2-model-api --models-file /ABS/PRIVATE/models.json --port 8792
 ```
 
-仅绑定 `127.0.0.1`。所有请求需 `Authorization: Bearer <本机令牌>`，拒绝浏览器 Origin 和错误 Host；令牌与模型密钥不放入 Issue。不自动进行收费请求重试。
-
-| 接口 | 用途 |
-|---|---|
-| `GET /health` | 服务和三种模式可用性 |
-| `GET /v1/models` | 本机登记的 provider、型号和 effort；不返回密钥或地址 |
-| `POST /v1/respond` | JSON `{ "prompt": "...", "models": {...} }`，返回 mode、model、text 和 collaboration_calls |
-
-HTTP 模式使用 provider ID；GPT 模式 primary 选本机登记的 `kind: gpt` provider（例如 `openai`），不是 `codex`。`gpt-led` 时 GPT 经 Responses function calling 决定调用外部模型，再综合最终答案；`api` 时只调用其它模型。接口是文本协作服务，**不会修改工作目录或发布 GitHub 任务**。要执行仓库工作，使用上述 Issue 协议。请求大小、模型返回体、输出 token 和调用时限有限制；轮数和协作调用次数可自行配置预算，默认不设次数限制。截断或未完成的模型结果不当作成功。
-
-## 本地成果、PR 与恢复
-
-工作目录为 `workspace_root/<目标仓库 ID>/<request_id>/`，分支为 `codex-mvp2/<host_id>/<request_id>`。执行结束检查授权路径、基线与工作目录，随后由控制器提交、推送并创建**草稿 PR**。PR 发到目标仓库，回执发到 Issue 所在仓库；回执包含会话 ID、commit 与 PR 链接。PR 仍需人工审查和合并。无文件变化时不制造空 PR，回执明确说明。
-
-网络错误时保留本地文件和发布进度。确认模型执行已完成的任务可只补做 push、查找/创建 PR 和回执；PR POST 或评论 POST 响应丢失后先查询已有对象，不重新执行模型、不 force push。模型执行途中中断、进程清理不确定或 commit 结果不确定则停止领取，要求人工核对。不清空数据库、不自动重放或 rebase。账号改名/仓库转移、基线变化、目标分支冲突都会被检查。
+仅绑定 127.0.0.1，需本机随机 `CODEX_COLLABORATION_TOKEN`，请求携带 Bearer；拒绝浏览器 Origin/错误 Host。`GET /health`、`GET /v1/models`、`POST /v1/respond`（JSON `{"prompt":"...","models":{...}}`）提供文本协作，不直接派发仓库任务。HTTP 的 GPT 需要登记 kind:gpt provider 和独立 API key，CLI 登录不能代替它。HTTP 使用线程服务，长请求不会堵住其它请求，默认不设数据/时长预算。
 
 ## 工作台
 
-构建 `web/app` 后启动：
+构建 web/app，运行 `codex-github-local-v2-workbench --config ... --dist ... --port 8791`。工作台只读显示真实执行事件、并行任务、模型、Git 进度、恢复和追加指示；分页预览不删除完整日志，不公开内部推理。手机的日常入口是 GitHub Issue，127.0.0.1 仅在执行机可直接访问。
 
-```bash
-/ABS/PRIVATE/mvp2-venv/bin/codex-github-local-v2-workbench \
-  --protocol mvp2 --config /ABS/PRIVATE/config.json --dist /ABS/SOURCE/web/app/dist --port 8791
-```
-
-浏览器打开 `http://127.0.0.1:8791/`。显示真实任务、会话 ID、模型/思考强度、发布阶段和 PR；已提交的文件变化相对任务基线展示。hub 派单时 Issue 链接仍指向 hub。工作台继续只读，不是模型 API 的写入口。
-
-监听器原子更新本机私有 listener-status.json（version 1），记录检查阶段、仓库数量、检查完成时间、下次检查时间及最多 50 项未领取原因。它是可选的状态投影，不修改任务数据库结构、冻结授权或历史任务，也不产生自动重放。旧安装缺少记录时明确显示尚无检查详情；身份不匹配或无效记录不展示。页面每 3 秒读取本机状态，区分页面刷新与 GitHub 检查。API 任务的当前轮数、等待模型回复和文件操作来自真实运行事件，不输出模型内部推理或文件正文。
-
-官方接口依据：[Codex CLI 会话与参数](https://learn.chatgpt.com/docs/developer-commands?surface=cli)、[MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Responses function calling](https://developers.openai.com/api/docs/guides/function-calling)。实际型号/effort 是否可用由账号和 provider 决定，未在代码中假定所有型号支持所有强度。
-
-MVP-2 的 `timeout_seconds` 可设为 1–10800 秒，当前安装示例为 10800 秒（3 小时）。这是单个任务的总执行时限，与模型单次 API 请求超时分开。已有执行使用启动时的时限；修改本机配置后须在任务结束、监听器空闲时重启监听服务，新任务才使用新值。
-
-Codex CLI 执行日志默认不设大小上限，超过 16 MiB 或 1 GiB 不会因日志大小终止任务。输出直接写入本机文件，完成检查按行读取日志。工作台仍分页显示日志，完整日志留在本机；任务总时限仍由 `timeout_seconds` 决定。
+接口依据：[Codex app-server](https://learn.chatgpt.com/docs/app-server)、[MCP](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)、[Responses function calling](https://developers.openai.com/api/docs/guides/function-calling)。验收范围见[VALIDATION](VALIDATION.md)。

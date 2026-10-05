@@ -25,7 +25,7 @@ def recover_api_session(store, config, registry, request_id):
     evidence = config.state_dir / 'runs' / request_id
     for name in ('context.json', 'execution.json', 'stdout.jsonl'):
         path = evidence / name
-        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(config.state_dir.resolve()) or path.stat().st_size > 2 * 1024 * 1024:
+        if path.is_symlink() or not path.is_file() or not path.resolve().is_relative_to(config.state_dir.resolve()):
             raise MvpError('invalid_api_context')
     metadata = read_json((evidence / 'execution.json').read_text(encoding='utf-8'))
     session_id = canonical_id(metadata.get('session_id'))
@@ -34,7 +34,7 @@ def recover_api_session(store, config, registry, request_id):
         raise MvpError('api_session_metadata_mismatch')
     raw = (evidence / 'context.json').read_text(encoding='utf-8')
     history = read_json(raw)
-    if not isinstance(history, list) or not history or len(raw.encode()) > 1024 * 1024:
+    if not isinstance(history, list) or not history:
         raise MvpError('invalid_api_context')
     if provider['wire_api'] == 'chat_completions':
         pending = set()

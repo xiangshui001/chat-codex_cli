@@ -19,12 +19,14 @@ from .mvp0_runner import MvpError, utc_now
 from .mvp1 import AccountGitHub, AccountStore, ManagedWorkspace, ReliableGitHub, run_git
 from .mvp2_contract import DesktopConfig, MARKER, TITLE_PREFIX, parse_desktop_task
 from .mvp2_runner import ApiFileRunner, SessionCodexRunner, discover_session, validate_cli_session
+from .remote_store import RemoteStore, REMOTE_SQL
+from .remote_git import RemoteWorkspace, run_remote_git
 
 LOG = logging.getLogger("codex-v2-mvp2")
 
 
-class DesktopStore(AccountStore):
-    schema_version = 4
+class DesktopStore(RemoteStore, AccountStore):
+    schema_version = 5
 
     @classmethod
     def migrate(cls, path):
@@ -33,15 +35,19 @@ class DesktopStore(AccountStore):
             version = db.execute("PRAGMA user_version").fetchone()[0]
             if version == cls.schema_version:
                 return
-            if version != 3:
+            if version not in {3,4}:
                 raise MvpError("unsupported_mvp_schema")
             db.execute("BEGIN IMMEDIATE")
             try:
                 if db.execute("SELECT 1 FROM tasks WHERE state IN ('queued','running')").fetchone():
                     raise MvpError("migration_requires_idle")
-                db.execute("DROP INDEX one_active_task")
-                db.execute("CREATE INDEX active_tasks ON tasks(state) WHERE state IN ('queued','running')")
-                db.execute("PRAGMA user_version=4")
+                if version == 3:
+                    db.execute("DROP INDEX one_active_task")
+                    db.execute("CREATE INDEX active_tasks ON tasks(state) WHERE state IN ('queued','running')")
+                for statement in REMOTE_SQL.split(';'):
+                    if statement.strip():db.execute(statement)
+                db.execute('INSERT OR IGNORE INTO remote_channels SELECT id,? FROM tasks',(utc_now(),))
+                db.execute("PRAGMA user_version=5")
                 db.execute("COMMIT")
             except BaseException:
                 db.execute("ROLLBACK")
@@ -64,6 +70,7 @@ class DesktopStore(AccountStore):
                 session_id TEXT PRIMARY KEY, target_id INTEGER NOT NULL, host_id TEXT NOT NULL,
                 backend TEXT NOT NULL, context_path TEXT, updated_at TEXT NOT NULL);
         """)
+        self.db.executescript(REMOTE_SQL)
 
     def active_tasks(self):
         return self.db.execute("SELECT * FROM tasks WHERE state IN ('queued','running') ORDER BY id").fetchall()
@@ -88,11 +95,14 @@ class DesktopStore(AccountStore):
                 (source.id, issue["id"], issue["number"], task.request_id, task.host_id, target.full_name,
                  task.base_sha, task.prompt, json.dumps(task.write_paths), task.comment_id, task.contract_hash, utc_now()))
             task_id = cursor.lastrowid
+            self.db.execute('INSERT INTO remote_channels VALUES(?,?)',(task_id,utc_now()))
             self.db.execute("INSERT INTO deliveries(task_id,source_repo,target_id,target_branch,options_json,config_snapshot) VALUES(?,?,?,?,?,?)",
                 (task_id, source.full_name, target.id, target.default_branch,
                  json.dumps({"session": task.session, "models": task.models}), json.dumps(snapshot)))
             self.event(task_id, "claimed", {"source_repo": source.full_name, "target_repo": target.full_name,
                                            "mode": task.models["mode"]})
+            self.queue_reply(task_id, 'claimed/' + task.request_id,
+                f"本机 **{task.host_id}** 已领取任务，正在准备执行。\n\n模型：`{task.models['primary']['model']}` · 思考强度：`{task.models['primary']['effort']}`。\n\n直接在本 Issue 追加指示即可；询问进度可发送 `/codex status`，停止可发送 `/codex stop`。默认执行不设时间或数据大小上限。")
             return task_id
 
     def delivery(self, task_id):
@@ -124,17 +134,86 @@ class DesktopStore(AccountStore):
             self.event(task_id, "publication_updated", values)
 
 
+class RemoteGitHubClient(ReliableGitHub):
+    def pages(self,endpoint):
+        rows=[];page=1
+        separator='&' if '?' in endpoint else '?'
+        while True:
+            batch=self.api(f'{endpoint}{separator}per_page=100&page={page}')
+            if not isinstance(batch,list) or any(not isinstance(i,dict) for i in batch):raise MvpError('invalid_github_page')
+            rows.extend(batch)
+            if len(batch)<100:return rows
+            page+=1
+
+    def issues(self):
+        return [i for i in self.pages(f'repos/{self.repo}/issues?state=open&sort=created&direction=asc')
+                if 'pull_request' not in i and (str(i.get('title','')).startswith((TITLE_PREFIX,'[codex]'))
+                    or str(i.get('body','')).startswith('/codex run '))]
+
+
 class DesktopGitHub(AccountGitHub):
+    def __init__(self,config,transport=None):
+        super().__init__(config,transport or RemoteGitHubClient(''))
+    def check_base(self,repo,task):
+        # Verify the requested commit exists in this repository, rather than requiring main to freeze.
+        self.repository(repo.full_name,repo.id)
+        commit=self.client(repo).api(f'repos/{repo.full_name}/commits/{task.base_sha}')
+        if not isinstance(commit,dict) or commit.get('sha')!=task.base_sha:raise MvpError('invalid_base_sha')
+
     def client(self, repo):
-        client = super().client(repo)
+        client = RemoteGitHubClient(repo.full_name)
+        client.repository_id=repo.id
+        client.writer_id=self.owner_id
         client.title_prefix = TITLE_PREFIX
         return client
 
 
 class DesktopWorkspace(ManagedWorkspace):
+    pulse=staticmethod(lambda:None)
+    evidence=None
+    reference=None
+    safe_path=RemoteWorkspace.safe_path
+    check_changes=RemoteWorkspace.check_changes
+
+    def git(self,*args):
+        return run_remote_git(self.config.workspace,*args,pulse=self.pulse,evidence=self.evidence,record=self.record)
+
     def preflight(self, task):
-        super().preflight(task)
-        self.git("branch", "-m", branch_name(task.host_id, task.request_id))
+        self.github.check_base(self.repo, task)
+        root, workspace = self.account.workspace_root, self.config.workspace
+        if root.is_symlink() or workspace.parent.is_symlink() or workspace.is_symlink() or not workspace.resolve().is_relative_to(root.resolve()):
+            raise MvpError('managed_workspace_path_escape')
+        if workspace.exists():
+            raise MvpError('managed_workspace_already_exists')
+        workspace.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        workspace.mkdir(mode=0o700)
+        self.record('workspace_preparing', {'repository_id': self.repo.id, 'cwd': str(workspace)})
+        reference=[]
+        if self.reference:
+            remote=run_remote_git(self.reference,'remote','get-url','origin',pulse=self.pulse,evidence=self.evidence,record=self.record)
+            if remote in {f'https://github.com/{self.repo.full_name}.git',f'https://github.com/{self.repo.full_name}'}:
+                reference=['--reference-if-able',str(self.reference),'--dissociate']
+        run_remote_git(workspace.parent, 'clone', '--no-checkout', '--single-branch',*reference,'--branch', self.repo.default_branch,
+                '--', f'https://github.com/{self.repo.full_name}.git', str(workspace),pulse=self.pulse,evidence=self.evidence,record=self.record)
+        # An older authorized commit remains valid if main advances while downloading.
+        try:self.git('cat-file', '-e', task.base_sha + '^{commit}')
+        except MvpError:
+            self.git('fetch','origin',task.base_sha)
+            self.git('cat-file','-e',task.base_sha+'^{commit}')
+        self.git('checkout', '-b', branch_name(task.host_id, task.request_id), task.base_sha)
+        self.registered()
+        if self.git('status', '--porcelain=v1', '--untracked-files=all'):
+            raise MvpError('workspace_not_clean')
+        for scope in task.write_paths:
+            self.safe_path(scope)
+        self.record('workspace_prepared', {'repository_id': self.repo.id, 'base_sha': task.base_sha})
+
+    def baseline(self, task):
+        # Publishing a branch from its frozen commit is normal when other computers update main.
+        self.registered()
+        head=self.git('rev-parse','HEAD')
+        if head!=task.base_sha:self.git('merge-base','--is-ancestor',task.base_sha,head)
+        if self.git('symbolic-ref','--short','HEAD')!=branch_name(task.host_id,task.request_id):raise MvpError('publication_branch_mismatch')
 
 
 def branch_name(host, request):
@@ -152,7 +231,7 @@ def receipt(row, delivery):
         f"- PR: {delivery['pr_url'] or 'not_created'}\n"
         f"- exit code: {row['exit_code'] if row['exit_code'] is not None else 'not_available'}\n"
         f"- reason: `{row['error'] or 'none'}`\n\n{row['summary']}\n\n"
-        "成果与执行日志保存在本机。PR 由用户审查并人工合并。")
+        "成果与执行日志保存在本机。直接在此 Issue 追加指示可继续原对话；`/codex status` 查询进度，`/codex retry` 续跑，`/codex merge` 合并成果 PR。")
 
 
 class Publisher:
@@ -166,16 +245,40 @@ class Publisher:
             raise MvpError("stale_base")
         from .mvp0 import Config, Task, Workspace
         task = Task(row["request_id"], row["host_id"], row["repo"], row["base_sha"], row["prompt"],
-                    tuple(json.loads(row["write_paths"])), row["comment_id"], row["contract_hash"])
+                    self.store.effective_paths(task_id), row["comment_id"], row["contract_hash"])
         workspace = Path(row["cwd"])
         config = Config(row["host_id"], row["repo"], (), workspace, (workspace,), Path("/"), d["target_branch"])
-        ws = Workspace(config)
+        def pulse():
+            for msg in self.store.inbox(task_id):
+                if msg['action']=='stop':
+                    self.store.delivered_message(msg['id']);raise MvpError('cancelled_by_owner')
+        ws = RemoteWorkspace(config,pulse,workspace.parent/'publication-evidence'/row['request_id'],lambda kind,detail:self.store.event(task_id,kind,detail))
         ws.registered()
         branch = branch_name(row["host_id"], row["request_id"])
         if ws.git("symbolic-ref", "--short", "HEAD") != branch:
             raise MvpError("publication_branch_mismatch")
-        self.github.check_base(target, task)
         commit = d["commit_sha"]
+        prior_commit=commit
+        actual=ws.git('rev-parse','HEAD')
+        expected=commit or task.base_sha
+        if d['publication_state']=='committing' and actual!=expected:
+            parent=ws.git('rev-parse','HEAD^')
+            subject=ws.git('show','-s','--format=%s','HEAD')
+            if parent!=expected or subject!='Codex task '+row['request_id'] or ws.changes():
+                raise MvpError('publication_workspace_changed')
+            changed=ws.git('diff','--name-only','--no-renames','-z',expected,actual,'--').split('\0')
+            for path in filter(None,changed):
+                ws.safe_path(path)
+                if not any(s=='.' or path==s.rstrip('/') or (s.endswith('/') and path.startswith(s)) for s in task.write_paths):raise MvpError('write_scope_violation')
+            commit=actual
+            self.store.publication(task_id,commit_sha=actual,publication_state='committed')
+        elif not commit and actual!=task.base_sha:
+            ws.check_changes(task,ws.changes())
+            commit=actual
+            self.store.publication(task_id,commit_sha=commit,publication_state='committed')
+        if commit and ws.git('rev-parse','HEAD')==commit and ws.changes():
+            task=replace(task,base_sha=commit)
+            commit=None
         if not commit:
             changes = ws.changes()
             ws.check_changes(task, changes)
@@ -183,9 +286,9 @@ class Publisher:
                 self.store.publication(task_id, publication_state="no_changes")
                 return None
             self.store.publication(task_id, publication_state="committing")
-            run_git(workspace, "--literal-pathspecs", "add", "-A", "--", *changes)
+            ws.git("--literal-pathspecs", "add", "-A", "--", *changes)
             # Git hooks are not part of model output or the publication operation.
-            run_git(workspace, "-c", "core.hooksPath=/dev/null", "-c", "user.name=" + row["host_id"] + " Codex",
+            ws.git("-c", "core.hooksPath=/dev/null", "-c", "user.name=" + row["host_id"] + " Codex",
                     "-c", "user.email=" + self.github.config.owner + "@users.noreply.github.com",
                     "commit", "-m", "Codex task " + row["request_id"])
             commit = ws.git("rev-parse", "HEAD")
@@ -193,15 +296,17 @@ class Publisher:
         if ws.git("rev-parse", "HEAD") != commit or ws.git("status", "--porcelain=v1", "--untracked-files=all"):
             raise MvpError("publication_workspace_changed")
         # Never force push; refuse an unrelated branch already present at the destination.
-        remote = run_git(workspace, "ls-remote", "origin", "refs/heads/" + branch)
+        remote = ws.git("ls-remote", "origin", "refs/heads/" + branch)
         if remote and remote.split()[0] != commit:
-            raise MvpError("publication_remote_branch_conflict")
-        if not remote:
-            run_git(workspace, "push", "origin", "HEAD:refs/heads/" + branch, timeout=120)
+            if not prior_commit or remote.split()[0]!=prior_commit:raise MvpError("publication_remote_branch_conflict")
+            ws.git('merge-base','--is-ancestor',prior_commit,commit)
+        if not remote or remote.split()[0]!=commit:
+            ws.git("push", "origin", "HEAD:refs/heads/" + branch)
         self.store.publication(task_id, publication_state="pushed")
         client = self.github.client(target)
         head = self.github.config.owner + ":" + branch
         prs = client.pages(f"repos/{target.full_name}/pulls?state=all&head={quote(head, safe='')}")
+        prs=[p for p in prs if p.get('state','open')=='open']
         if prs:
             if len(prs) != 1 or prs[0].get("head", {}).get("sha") != commit or prs[0].get("base", {}).get("ref") != d["target_branch"]:
                 raise MvpError("publication_pr_conflict")
@@ -232,6 +337,8 @@ class DesktopPoller:
         self.errors = 0
         self.status = ListenerStatus(config)
         self.workers = {}
+        from .issue_control import IssueControl
+        self.remote=IssueControl(config,store,self.github)
 
     def reap_workers(self):
         for task_id, process in list(self.workers.items()):
@@ -255,10 +362,15 @@ class DesktopPoller:
         path = self.store.path
         self.store.close()
         self.store = DesktopStore(path)
+        from .process_identity import identity
+        self.store.event(task_id,'worker_started',{'lease':identity(os.getpid())})
+        from .issue_control import IssueControl
+        self.remote=IssueControl(self.config,self.store,self.github)
         if isinstance(self.publisher, Publisher):
             self.publisher = Publisher(self.github, self.store)
         try:
-            self.execute(task_id, task, target, known_session)
+            if task is None:self.finish_publication(task_id)
+            else:self.execute(task_id, task, target, known_session)
         except KeyboardInterrupt:
             # execute/runner records interruption and cleanup; uncertain rows stay blocked.
             pass
@@ -325,60 +437,127 @@ class DesktopPoller:
         if url:
             self.store.publication(task_id, pr_url=url, publication_state="published")
         self.store.finish(task_id, "succeeded", 0, None, bool(url),
-            "成果保存在本机，已提交分支并创建草稿 PR。" if url else "任务完成，无文件变化，因此没有可创建的 PR。")
+            "成果保存在本机，已上传分支并确认成果 PR。" if url else "任务完成，无文件变化，因此没有可创建的 PR。")
         self.send_receipt(self.store.get(task_id))
 
     def execute(self, task_id, task, target, known_session):
         evidence = self.config.state_dir / "runs" / task.request_id
         selected = self.config.state_dir / "selections" / task.request_id
-        selected.mkdir(parents=True, exist_ok=False, mode=0o700)
+        generation=self.store.generation(task_id)
+        if generation:selected=selected/('continuation-'+str(generation))
+        selected.mkdir(parents=True, exist_ok=True, mode=0o700)
         # Freeze the registry for this run; never put API keys in this snapshot.
         d = self.store.delivery(task_id)
         snapshot = json.loads(d["config_snapshot"])
+        if generation:snapshot['registry']={"providers":self.registry.providers,**self.registry.limits}
         models_path, options_path = selected / "models.json", selected / "options.json"
-        models_path.write_text(json.dumps(snapshot["registry"]), encoding="utf-8")
-        options_path.write_text(json.dumps(task.models), encoding="utf-8")
+        if not models_path.exists():models_path.write_text(json.dumps(snapshot["registry"]), encoding="utf-8")
+        if not options_path.exists():options_path.write_text(json.dumps(task.models), encoding="utf-8")
         config = replace(self.config, models_file=models_path)
         registry = ModelRegistry(models_path)
         workspace = target.task_config(config, task.request_id).workspace
         ws = self.workspace_factory(target.task_config(config, task.request_id), config, target, self.github,
                                     lambda kind, detail: self.store.event(task_id, kind, detail))
         code, error, changed = None, None, None
+        def control():
+            return self.store.inbox(task_id)
+        def record(kind,detail):
+            self.store.event(task_id,kind,detail)
+            if kind=='remote_session_opened':
+                self.store.save_session(task_id,detail['session_id'],task.models['primary']['provider'],detail.get('context_path'))
+            if kind=='remote_agent_message' and detail.get('phase') in {None,'final_answer'}:
+                import hashlib
+                text=detail.get('text','')
+                self.store.queue_reply(task_id,'model/'+task.request_id+'/'+hashlib.sha256(text.encode()).hexdigest(),text)
+            if kind in {'remote_recovery','api_response_recovery'}:
+                reason=detail.get('reason','connection_error')
+                permanent=reason in {'model_http_400','model_http_401','model_http_403','model_http_404','model_api_key_missing'}
+                self.store.queue_reply(task_id,'recovery/'+task.request_id+'/'+reason,
+                    ('模型服务拒绝请求，正在保留现场等待接口恢复：`' if permanent else '执行遇到临时问题，正在保留对话恢复：`')+reason+'`。任务不会因次数或时间上限终止；可发送 `/codex status` 查看，或直接追加指示。'
+                    + ('请核对模型名、接口参数或服务商的鉴权/额度。' if permanent else ''))
+        def cancelled():
+            for msg in control():
+                if msg['action']=='stop':
+                    self.store.delivered_message(msg['id']);raise MvpError('cancelled_by_owner')
         try:
-            ws.preflight(task)
+            import time
+            if isinstance(ws,DesktopWorkspace):ws.pulse=cancelled;ws.evidence=evidence/'git'
+            attempt=0
+            # Only directories reserved for this exact task may be recovered; originals are retained.
+            while True:
+                cancelled()
+                try:
+                    if workspace.exists() and self.store.get(task_id)['cwd']==str(workspace):
+                        ws.registered()
+                        if ws.git('symbolic-ref','--short','HEAD')!=branch_name(task.host_id,task.request_id):raise MvpError('publication_branch_mismatch')
+                    else:
+                        if workspace.exists():
+                            owned=self.store.db.execute("SELECT 1 FROM events WHERE task_id=? AND kind='workspace_preparing'",(task_id,)).fetchone()
+                            if not owned:raise MvpError('managed_workspace_already_exists')
+                            backup=workspace.with_name(workspace.name+'-incomplete-'+str(time.time_ns()))
+                            workspace.rename(backup)
+                            record('workspace_recovery_backup',{'retained':str(backup)})
+                            if isinstance(ws,DesktopWorkspace) and (backup/'.git').is_dir():ws.reference=backup
+                        ws.preflight(task)
+                    break
+                except MvpError as exc:
+                    if not (str(exc).startswith(('workspace_git_','github_'))):raise
+                    attempt+=1;record('remote_recovery',{'reason':str(exc),'phase':'prepare','attempt':attempt})
+                    wake=time.monotonic()+min(2**min(attempt,6),60)
+                    while time.monotonic()<wake:cancelled();time.sleep(.2)
+            task=replace(task,write_paths=self.store.effective_paths(task_id))
+            prior_commit=self.store.delivery(task_id)['commit_sha']
+            if prior_commit:task=replace(task,base_sha=prior_commit)
+            saved=self.store.delivery(task_id)['session_id']
+            if saved and task.models['mode']!='api':task=replace(task,session={'mode':'resume','id':saved})
             if task.models["mode"] == "api":
                 history = None
                 if known_session:
                     context = Path(known_session["context_path"])
-                    if context.is_symlink() or not context.resolve().is_relative_to(self.config.state_dir) or context.stat().st_size > 1024*1024:
+                    if context.is_symlink() or not context.resolve().is_relative_to(self.config.state_dir):
                         raise MvpError("invalid_api_context")
                     history = read_json(context.read_text(encoding="utf-8"))
                 metadata = {"cli_version": "api-agent/0.1.0", "argv": ["api-agent", task.models["primary"]["provider"]], "cwd": str(workspace)}
-                self.store.start(task_id, metadata)
-                result, session_id, context = ApiFileRunner(registry).run_task(task, workspace, evidence, config.timeout_seconds,
-                    lambda k, v: self.store.event(task_id, k, v), history, task.session.get("id"))
+                if self.store.get(task_id)['state']=='queued':self.store.start(task_id, metadata)
+                api_runner=ApiFileRunner(registry)
+                api_runner.control=control;api_runner.ack=self.store.delivered_message
+                api_runner.paths=lambda:self.store.effective_paths(task_id)
+                if history is None and (evidence/'context.json').is_file():history=read_json((evidence/'context.json').read_text(encoding='utf-8'))
+                result, session_id, context = api_runner.run_task(task, workspace, evidence, config.timeout_seconds,
+                    record, history, self.store.delivery(task_id)['session_id'] or task.session.get("id"))
             else:
                 metadata = self.runner.prepare_task(workspace, task, config, registry, options_path)
-                self.store.start(task_id, metadata)
+                if self.store.get(task_id)['state']=='queued':self.store.start(task_id, metadata)
                 prompt = ("Complete the current authorized task in the CURRENT workspace: " + str(workspace)
                     + ". Old conversation paths/permissions are superseded. Only modify these relative paths: "
-                    + json.dumps(task.write_paths) + ". Do not commit, change branches, change Git configuration, push, create PRs, or deploy. "
+                    + json.dumps(task.write_paths) + ". Work on the current task branch. Local commands, tests and commits are allowed; do not change the repository identity, force push, publish PRs or deploy. "
                     + "The controller will validate and publish your changes.\n")
                 if task.models["mode"] == "gpt-led":
                     prompt += ("You are the GPT leader. Use collaborators.consult_model to delegate focused questions to configured external models as needed; "
-                        "evaluate their replies, make the final decisions and perform the file changes yourself. Configured models: "
+                        "It returns a background job_id; use collaborators.get_consultation to check progress/results while continuing independent work. "
+                        "Wait for relevant consultations to finish before the final answer. Evaluate their replies, make the final decisions and perform the file changes yourself. Configured models: "
                         + json.dumps(task.models["collaborators"]) + "\n")
                 else:
                     prompt += "Use only the selected GPT model; do not call external model APIs or spawn other models.\n"
-                result = self.runner.run(metadata, prompt + task.prompt, evidence, config.timeout_seconds,
-                                         lambda k, v: self.store.event(task_id, k, v))
-                session_id = discover_session(evidence, task.session.get("id")) if result.error is None else None
+                if isinstance(self.runner,SessionCodexRunner):
+                    self.runner.control=control;self.runner.ack=self.store.delivered_message
+                attempt=0
+                while True:
+                    result = self.runner.run(metadata, prompt + task.prompt, evidence, config.timeout_seconds,record)
+                    if result.error not in {'codex_server_disconnected','codex_thread_unavailable'}:break
+                    attempt+=1;record('remote_recovery',{'reason':result.error,'attempt':attempt})
+                    saved=self.store.delivery(task_id)['session_id']
+                    if saved:metadata['session_id']=saved
+                    wake=time.monotonic()+min(2**min(attempt,6),60)
+                    while time.monotonic()<wake:cancelled();time.sleep(.2)
+                session_id = discover_session(evidence, task.session.get("id")) if result.error is None else self.store.delivery(task_id)['session_id']
                 context = None
             code, error = result.exit_code, result.error
             changes = ws.changes()
             changed = bool(changes)
             if error is not None:
                 raise MvpError(error)
+            task=replace(task,write_paths=self.store.effective_paths(task_id))
             ws.check_changes(task, changes)
             ws.baseline(task)
             self.store.save_session(task_id, session_id, task.models["primary"]["provider"],
@@ -390,7 +569,7 @@ class DesktopPoller:
                 self.store.event(task_id, "cleanup_failed", {})
                 raise
             self.store.finish(task_id, "stale_base" if error == "stale_base" else "failed", code, error, changed,
-                              "任务未完成；已有文件与诊断保存在本机。")
+                              "任务已保留现场。可在本 Issue 回复 /codex retry 从现有进度继续，或 /codex allow . 扩大到整个仓库。无需回到电脑前重新派单。")
             self.send_receipt(self.store.get(task_id))
             if error == "interrupted":
                 raise KeyboardInterrupt()
@@ -423,15 +602,47 @@ class DesktopPoller:
         repos = self.github.repositories()
         self.status.update(repository_count=len(repos))
         self.store.bind(self.config, self.github.owner_id)
+        self.remote.poll(repos)
         for active in self.store.active_tasks():
             if active['id'] in self.workers:
                 continue
             d = self.store.delivery(active["id"])
+            from .process_identity import alive,stop
+            previous=self.store.db.execute("SELECT detail FROM events WHERE task_id=? AND kind='worker_started' ORDER BY id DESC LIMIT 1",(active['id'],)).fetchone()
+            lease=json.loads(previous['detail']).get('lease') if previous else None
+            if alive(lease):continue
             # Resume only publication, never replay a model execution after a crash.
-            if not d or not d["execution_completed"] or d["publication_state"] == "committing":
-                raise MvpError("unfinished_task_requires_manual_inspection")
+            if not d or not d["execution_completed"]:
+                # Never let one uncertain execution freeze every other Issue.
+                pending=self.store.inbox(active['id'])
+                can_resume=bool(previous) or (active['state']=='queued' and 'registry' in json.loads(d['config_snapshot'])) or any(m['action'] in {'retry','say','allow'} for m in pending)
+                if not can_resume:
+                    self.store.queue_reply(active['id'],'restart/'+active['request_id'],
+                        '监听器重启后发现保留的执行现场。其它任务继续接单；本任务可回复 `/codex retry` 在原目录续跑。')
+                    self.store.finish(active['id'],'failed',None,'execution_state_unknown',None,
+                        '执行现场已保留，未盲目重复执行。直接回复 /codex retry 即可远程恢复，其它 Issue 正常执行。')
+                    continue
+                evidence=self.config.state_dir/'runs'/active['request_id']
+                for audit in evidence.rglob('execution.json') if evidence.is_dir() else ():
+                    try:
+                        info=read_json(audit.read_text(encoding='utf-8'))
+                        stop(info.get('lease'))
+                    except (OSError,ValueError,MvpError):
+                        self.store.queue_reply(active['id'],'cleanup/'+active['request_id'],'正在核对并清理此任务遗留进程，保留现场，其它任务继续接单。')
+                        break
+                else:
+                    target=next((r for r in repos if r.id==d['target_id']),None)
+                    if target is None:continue
+                    from .mvp2_contract import DesktopTask
+                    options=json.loads(d['options_json'])
+                    restored=DesktopTask(active['request_id'],active['host_id'],active['repo'],active['base_sha'],active['prompt'],
+                        self.store.effective_paths(active['id']),active['comment_id'],active['contract_hash'],options['session'],options['models'])
+                    known=self.store.db.execute('SELECT * FROM sessions WHERE session_id=?',(d['session_id'],)).fetchone() if d['session_id'] else None
+                    self.start_worker(active['id'],restored,target,known)
+                continue
             self.status.update(phase='publishing')
-            self.finish_publication(active["id"])
+            if isinstance(self.runner,SessionCodexRunner):self.start_worker(active['id'],None,None,None)
+            else:self.finish_publication(active["id"])
         for row in self.store.pending_receipts():
             if row['id'] not in self.workers:
                 self.send_receipt(row)
@@ -464,22 +675,29 @@ class DesktopPoller:
                 current = parse_desktop_task(current_issue, client.comments(issue["number"]), source, self.config)
                 if current.contract_hash != task.contract_hash or current_issue.get("id") != issue.get("id"):
                     raise MvpError("authorization_changed")
+                if not task.base_sha:
+                    commit=self.github.client(target).api(f'repos/{target.full_name}/commits/{quote(target.default_branch,safe="")}')
+                    if not isinstance(commit,dict) or not isinstance(commit.get('sha'),str):raise MvpError('invalid_base_sha')
+                    task=replace(task,base_sha=commit['sha'])
                 snapshot = {"host_id": self.config.host_id, "hub_repo": self.config.hub_repo,
                             "registry": {"providers": self.registry.providers, **self.registry.limits}}
                 snapshot['max_parallel_tasks'] = self.config.max_parallel_tasks
+                snapshot['auto_merge']=self.config.auto_merge
                 task_id = self.store.claim_desktop(source, target, issue, task, snapshot, self.config.max_parallel_tasks)
             except MvpError as exc:
                 if str(exc) != "wrong_host":
                     LOG.warning("task_rejected repository_id=%s issue=%s code=%s", source.id, issue.get("number"), exc)
                     self.status.reject(source, issue, str(exc), task, self.registry)
+                    self.remote.reject(source,issue,str(exc),task)
                 continue
             if task_id is not None:
                 self.status.update(phase='executing')
-                if self.config.max_parallel_tasks == 1:
+                if self.config.max_parallel_tasks == 1 and not isinstance(self.runner,SessionCodexRunner):
                     self.execute(task_id, task, target, known_session)
                     return 1
                 self.start_worker(task_id, task, target, known_session)
                 count += 1
+        self.remote.flush(repos)
         return count
 
 
@@ -489,7 +707,7 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--once", action="store_true")
     mode.add_argument("--list-repos", action="store_true")
-    mode.add_argument("--migrate-state", action="store_true", help="Explicitly migrate idle MVP-2 engine state from schema 3 to 4")
+    mode.add_argument("--migrate-state", action="store_true", help="Explicitly migrate idle MVP-2 engine state from schema 3/4 to 5")
     mode.add_argument('--recover-api-session', metavar='REQUEST_ID', help='Explicitly register retained context from one failed API task; does not execute it')
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
@@ -515,11 +733,11 @@ def main(argv=None):
                 path = config.state_dir / 'mvp2.sqlite3'
                 if not path.is_file() or path.is_symlink():
                     raise MvpError('state_database_missing')
-                backup = path.with_name('mvp2-schema3-backup-' + utc_now().replace(':', '-') + '.sqlite3')
+                backup = path.with_name('mvp2-engine-backup-' + utc_now().replace(':', '-') + '.sqlite3')
                 with sqlite3.connect(path) as source, sqlite3.connect(backup) as destination:
                     source.backup(destination)
                 DesktopStore.migrate(path)
-                print('Engine state migrated to schema 4; existing tasks and sessions retained.')
+                print('Engine state migrated to schema 5; existing tasks, sessions and frozen contracts retained.')
                 return 0
             store = DesktopStore(config.state_dir / "mvp2.sqlite3")
             poller = None
@@ -536,7 +754,7 @@ def main(argv=None):
                         count = poller.once()
                     except MvpError as exc:
                         LOG.error("poll_failed code=%s", exc)
-                        if args.once or (store.unfinished() and not poller.workers):
+                        if args.once:
                             return 1
                         import time
                         time.sleep(config.poll_seconds)

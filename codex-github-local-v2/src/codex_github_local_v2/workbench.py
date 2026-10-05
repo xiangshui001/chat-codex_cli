@@ -106,10 +106,23 @@ def activity(row):
         if type(detail.get('output_tokens')) is int:
             result['label'] += f" · 单次输出预算 {detail['output_tokens']}"
     elif row['kind'] == 'api_file_tool':
-        name = {'read_file': '读取文件', 'list_files': '查看文件列表', 'write_file': '写入文件', 'delete_file': '删除文件'}.get(detail.get('name'), '文件工具')
+        name = {'read_file': '读取文件', 'list_files': '查看文件列表', 'write_file': '写入文件', 'delete_file': '删除文件','run_command':'运行命令/测试','read_command_output':'查看命令输出'}.get(detail.get('name'), '文件工具')
         result['label'] = name + ('失败' if detail.get('ok') is False else '') + budget
         if isinstance(detail.get('path'), str):
             result['label'] += ' · ' + clean(detail['path'], 300)
+    elif row['kind'] in {'remote_git_started','remote_git_finished'}:
+        operation={'clone':'下载仓库','checkout':'准备工作目录','commit':'保存提交','push':'上传成果','status':'检查文件状态','diff':'检查文件变化'}.get(detail.get('operation'),'检查仓库')
+        result['label']=operation+('进行中' if row['kind']=='remote_git_started' else '已结束')
+    elif row['kind']=='remote_recovery':
+        result['label']='正在保留现场恢复 · '+clean(detail.get('reason'),200)
+    elif row['kind']=='remote_transport_error':
+        result['label']='模型连接正在恢复'
+    elif row['kind'] in {'remote_instruction_received','remote_instruction_applied'}:
+        result['label']='已收到手机追加指示' if row['kind']=='remote_instruction_received' else '原对话已接收追加指示'
+    elif row['kind']=='remote_turn_started':result['label']='模型正在处理原对话'
+    elif row['kind']=='remote_file_change':result['label']='模型已修改文件'
+    elif row['kind']=='remote_agent_message':result['label']='模型已回复'
+    elif row['kind']=='remote_resumed':result['label']='从保留的对话和文件续跑'
     return result
 
 
@@ -234,8 +247,8 @@ class Reader:
 
 class DesktopReader(Reader):
     database_name = 'mvp2.sqlite3'
-    schema_version = 4
-    supported_schemas = (3, 4)
+    schema_version = 5
+    supported_schemas = (3, 4, 5)
     source = 'local-mvp2'
     task_select = 'SELECT tasks.*,deliveries.* FROM tasks JOIN deliveries ON deliveries.task_id=tasks.id'
 

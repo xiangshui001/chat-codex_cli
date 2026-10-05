@@ -84,11 +84,11 @@ class AccountStore(Store):
 class ReliableGitHub(GitHub):
     title_prefix = TITLE_PREFIX
 
-    def api(self, endpoint: str, body: dict | None = None):
+    def api(self, endpoint: str, body: dict | None = None, *, method=None):
         # Only idempotent reads retry. POST uses the existing receipt reconciliation.
         for attempt in range(3 if body is None else 1):
             try:
-                return super().api(endpoint, body)
+                return super().api(endpoint, body, method=method) if method else super().api(endpoint, body)
             except MvpError as exc:
                 if body is not None or attempt == 2 or str(exc) not in {
                     "github_transport_unavailable", "github_cli_failed", "github_http_429",
@@ -183,14 +183,17 @@ class AccountGitHub:
             raise MvpError("stale_base")
 
 
-def run_git(cwd: Path, *args: str, timeout: int = 30) -> str:
+def run_git(cwd: Path, *args: str, timeout: int | None = None) -> str:
     try:
         # Use the existing gh login; no token in argv, files or returned errors.
         return subprocess.run(["git", "-c", "credential.helper=", "-c",
             "credential.helper=!gh auth git-credential", "-C", str(cwd), *args],
             check=True, capture_output=True, text=True, encoding="utf-8", timeout=timeout).stdout.rstrip("\r\n")
     except (OSError, subprocess.SubprocessError, UnicodeError) as exc:
-        raise MvpError("workspace_git_failed") from exc
+        # Keep raw diagnostics private. The receipt names the operation and failure class.
+        operation = next((a for a in args if a in {"clone", "checkout", "status", "commit", "push", "fetch", "ls-remote", "rev-parse", "add"}), "command")
+        reason = "timeout" if isinstance(exc, subprocess.TimeoutExpired) else "failed"
+        raise MvpError("workspace_git_" + operation.replace('-', '_') + "_" + reason) from exc
 
 
 class ManagedWorkspace(Workspace):

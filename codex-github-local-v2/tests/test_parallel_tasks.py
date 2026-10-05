@@ -59,7 +59,7 @@ class ParallelStoreTests(fixtures.Fixture):
             DesktopStore(path)
         DesktopStore.migrate(path)
         self.assertEqual(dict(legacy.get(1)), before)
-        self.assertEqual(legacy.db.execute('PRAGMA user_version').fetchone()[0], 4)
+        self.assertEqual(legacy.db.execute('PRAGMA user_version').fetchone()[0], 5)
         self.assertEqual(DesktopReader(self.config).overview()['counts'], {'failed': 1})
         DesktopStore.migrate(path)
 
@@ -78,16 +78,16 @@ class ParallelStoreTests(fixtures.Fixture):
                 'state_dir': str(self.config.state_dir)}
         path.write_text(json.dumps(data))
         self.assertEqual(DesktopConfig.load(path).max_parallel_tasks, 1)
-        for value in (0, -1, 17, True, 2.5, '3'):
+        for value in (0, -1, True, 2.5, '3'):
             path.write_text(json.dumps({**data, 'max_parallel_tasks': value}))
             with self.subTest(value=value), self.assertRaisesRegex(MvpError, 'invalid_max_parallel_tasks'):
                 DesktopConfig.load(path)
         path.write_text(json.dumps({**data, 'max_parallel_tasks': 3}))
         self.assertEqual(DesktopConfig.load(path).max_parallel_tasks, 3)
-        for timeout in (3601, 10800):
+        for timeout in (3601, 10800, 10801, None):
             path.write_text(json.dumps({**data, 'timeout_seconds': timeout}))
             self.assertEqual(DesktopConfig.load(path).timeout_seconds, timeout)
-        for timeout in (0, 10801, True, 1.5, '10800'):
+        for timeout in (0, True, 1.5, '10800'):
             path.write_text(json.dumps({**data, 'timeout_seconds': timeout}))
             with self.subTest(timeout=timeout), self.assertRaisesRegex(MvpError, 'invalid_timeout_seconds'):
                 DesktopConfig.load(path)
@@ -123,7 +123,7 @@ class ParallelProcessTests(fixtures.Fixture):
         self.issues = [{**self.issue, 'id': 101 + i, 'number': 3 + i} for i in range(3)]
         self.payloads = {issue['number']: {**self.payload, 'request_id': str(uuid.uuid4())} for issue in self.issues}
         self.clients[10].issues.return_value = self.issues
-        self.clients[10].api.side_effect = lambda endpoint: next(
+        self.clients[10].api.side_effect = lambda endpoint, body=None: {'id': 500} if body else next(
             issue for issue in self.issues if endpoint.endswith('/' + str(issue['number'])))
         self.clients[10].comments.side_effect = lambda number: [{**self.comment,
             'body': MARKER + '\n' + json.dumps(self.payloads[number])}]
@@ -157,10 +157,11 @@ class ParallelProcessTests(fixtures.Fixture):
         self.assertEqual(self.s.db.execute("SELECT COUNT(*) FROM events WHERE kind='execution_completed'").fetchone()[0], 3)
 
     def test_restart_does_not_replay_unowned_execution(self):
-        self.s.claim_desktop(self.source, self.target, self.issue, self.parse(), {}, 2)
-        with self.assertRaisesRegex(MvpError, 'manual_inspection'):
-            self.p.once()
-        self.assertEqual(self.p.workers, {})
+        ident=self.s.claim_desktop(self.source, self.target, self.issue, self.parse(), {}, 2)
+        self.p.once()
+        self.assertEqual(self.s.get(ident)['error'],'execution_state_unknown')
+        self.wait_workers()
+        self.assertEqual(self.s.db.execute("SELECT COUNT(*) FROM events WHERE task_id=? AND kind='fake_model_started'",(ident,)).fetchone()[0],0)
 
     def test_busy_conversation_waits_while_unrelated_task_uses_free_slot(self):
         for number in (3, 4):
@@ -207,9 +208,9 @@ class ParallelProcessTests(fixtures.Fixture):
         states = [r['state'] for r in self.s.db.execute('SELECT state FROM tasks')]
         self.assertIn('succeeded', states)
         self.assertTrue(self.s.unfinished())
-        with self.assertRaisesRegex(MvpError, 'manual_inspection'):
-            self.p.once()
-        self.assertFalse(self.s.by_issue(self.source.id, self.issues[2]['id']))
+        self.p.once()
+        self.assertTrue(self.s.by_issue(self.source.id, self.issues[2]['id']))
+        self.wait_workers()
 
 
 if __name__ == '__main__':

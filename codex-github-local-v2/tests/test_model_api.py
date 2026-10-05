@@ -61,7 +61,8 @@ class ApiFixture(unittest.TestCase):
                       'models': ['other-test'], 'effort_map': {'high': 'high', 'none': None}},
         }
         self.file = self.root / 'models.json'
-        self.file.write_text(json.dumps({'providers': self.providers, 'max_calls': 2, 'max_turns': 4}))
+        self.file.write_text(json.dumps({'providers': self.providers, 'max_calls': 2, 'max_turns': 4,
+                                        'max_output_tokens':8192,'recovery_max_output_tokens':32768}))
         self.registry = ModelRegistry(self.file)
         env = patch.dict(os.environ, {'TEST_GPT_KEY': 'test-gpt-secret', 'TEST_OTHER_KEY': 'test-other-secret'})
         env.start(); self.addCleanup(env.stop)

@@ -119,6 +119,18 @@ const stages: Record<string, string> = {
   api_response_recovery: '正在保留上下文续写',
   api_session_recovered: '已找回失败任务的对话上下文',
   model_consulted: 'GPT 已向协作模型提问',
+  remote_instruction_received: '已收到 Issue 追加指示',
+  remote_instruction_applied: '原对话已接收追加指示',
+  remote_session_opened: '原对话已连接',
+  remote_turn_started: '模型正在处理原对话',
+  remote_recovery: '保留现场恢复中',
+  remote_transport_error: '模型连接正在恢复',
+  remote_resumed: '从原对话和文件续跑',
+  remote_file_change: '模型已修改文件',
+  remote_agent_message: '模型已回复',
+  remote_git_started: 'Git 操作进行中',
+  remote_git_finished: 'Git 操作已结束',
+  worker_started: '独立执行进程已启动',
 };
 const time = (value: string | null) =>
   value ? new Date(value).toLocaleString('zh-CN', { hour12: false }) : '尚未发生';
@@ -532,6 +544,13 @@ export function LiveWorkbench() {
                   ) : (
                     <span>GitHub 回执：{detail.finished_at ? '等待回写' : '执行结束后回写'}</span>
                   )}
+                  <p className="live-muted">
+                    手机直接在原 Issue 留言可追加指示；/codex status 查进度，/codex retry
+                    续跑，/codex stop 停止。
+                  </p>
+                  <a className="live-link" href={detail.issue_url} target="_blank" rel="noreferrer">
+                    打开原 Issue 继续对话 <ArrowUpRight size={14} />
+                  </a>
                 </div>
                 <div className="live-process-grid">
                   <section>

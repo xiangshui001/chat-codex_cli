@@ -62,6 +62,17 @@ def discover_session(evidence, expected=None):
 
 
 class SessionCodexRunner(CodexRunner):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        self.control=lambda:[]
+        self.ack=lambda *_:None
+
+    def run(self,metadata,prompt,evidence,timeout,record):
+        if metadata.get('transport')=='app_server':
+            from .app_server_runner import AppServerRunner
+            return AppServerRunner(self.control,self.ack).run(metadata,prompt,evidence,timeout,record)
+        return super().run(metadata,prompt,evidence,timeout,record)
+
     def prepare_task(self, workspace, task, config, registry, options_path):
         metadata = super().prepare(workspace)
         chosen = task.models["primary"]
@@ -77,8 +88,7 @@ class SessionCodexRunner(CodexRunner):
                           "-c", "mcp_servers.collaborators.args=" + json.dumps(args),
                           "-c", "mcp_servers.collaborators.env_vars=" + json.dumps(key_names),
                           "-c", 'mcp_servers.collaborators.default_tools_approval_mode="auto"',
-                          "-c", "mcp_servers.collaborators.required=true",
-                          "-c", "mcp_servers.collaborators.tool_timeout_sec=" + str(registry.limits["request_timeout"])]
+                          "-c", "mcp_servers.collaborators.required=true"]
         argv = [*self.command, "--ask-for-approval", "never", *overrides, "exec", "--json",
                 "--color", "never", "--cd", str(workspace), "--model", chosen["model"]]
         if task.session["mode"] == "resume":
@@ -87,112 +97,78 @@ class SessionCodexRunner(CodexRunner):
             argv += ["resume", "--model", chosen["model"], task.session["id"]]
         argv += ["-"]
         metadata.update(argv=argv, mode=task.models["mode"], model=chosen["model"], effort=chosen["effort"])
+        if config.full_access:
+            overrides=[v.replace('sandbox_mode="workspace-write"','sandbox_mode="danger-full-access"') for v in overrides]
+        metadata.update(argv=[*self.command,*overrides,'app-server','--listen','stdio://'],
+                        transport='app_server',full_access=config.full_access,session_id=task.session.get('id'))
         return metadata
 
 
-FILE_TOOLS = [
-    {"name": "list_files", "description": "List up to 300 repository files; Git internals and secrets are excluded.",
-     "parameters": {"type": "object", "properties": {}, "additionalProperties": False}},
-    {"name": "read_file", "description": "Read one UTF-8 repository file (maximum 64 KiB).",
-     "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}},
-    {"name": "write_file", "description": "Write one UTF-8 file inside the authorized write paths (maximum 64 KiB).",
-     "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}},
-                    "required": ["path", "content"], "additionalProperties": False}},
-    {"name": "delete_file", "description": "Delete one regular file inside the authorized write paths.",
-     "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"], "additionalProperties": False}},
-]
-
-
-class FileTools:
-    def __init__(self, workspace, write_paths):
-        self.workspace = Path(workspace).resolve()
-        self.write_paths = write_paths
-
-    def path(self, raw, *, write=False):
-        name = write_path(raw)
-        parts = Path(name).parts
-        if any(p.startswith(".env") or p.lower() in {"auth.json", "credentials", "credentials.json"} for p in parts):
-            raise MvpError("secret_file_not_allowed")
-        dest = self.workspace / name
-        if not dest.resolve().is_relative_to(self.workspace):
-            raise MvpError("tool_path_escape")
-        for p in (dest, *dest.parents):
-            if p == self.workspace:
-                break
-            if p.is_symlink():
-                raise MvpError("symlink_tool_path")
-        if write and not any(name == scope.rstrip("/") or (scope.endswith("/") and name.startswith(scope)) for scope in self.write_paths):
-            raise MvpError("write_scope_violation")
-        return dest
-
-    def call(self, name, args):
-        if name == "list_files":
-            fields(args, set())
-            # Do not traverse .git, symlinks, dependency trees or hidden secret directories.
-            files = []
-            for base, dirs, names in os.walk(self.workspace, followlinks=False):
-                dirs[:] = sorted(d for d in dirs if not d.startswith(".") and d not in {"node_modules", "venv"}
-                                 and not (Path(base) / d).is_symlink())
-                for item in sorted(names):
-                    path = (Path(base) / item).relative_to(self.workspace).as_posix()
-                    try:
-                        self.path(path)
-                    except MvpError:
-                        continue
-                    files.append(path)
-                    if len(files) >= 300:
-                        return {"files": files, "truncated": True}
-            return {"files": files, "truncated": False}
-        if name not in {"read_file", "write_file", "delete_file"}:
-            raise MvpError("model_tool_not_allowed")
-        fields(args, {"path", "content"} if name == "write_file" else {"path"})
-        path = self.path(args["path"], write=name != "read_file")
-        if name == "read_file":
-            if not path.is_file() or path.stat().st_size > 65536:
-                raise MvpError("file_missing_or_too_large")
-            return {"content": path.read_text(encoding="utf-8")}
-        if name == "write_file":
-            content = args["content"]
-            if not isinstance(content, str) or len(content.encode()) > 65536:
-                raise MvpError("invalid_file_content")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content, encoding="utf-8")
-        else:
-            if not path.is_file():
-                raise MvpError("regular_file_required")
-            path.unlink()
-        return {"path": args["path"], "status": "ok"}
+from .large_file_tools import FILE_TOOLS, RepositoryTools as FileTools
 
 
 class ApiFileRunner:
     """The other-model mode never starts Codex or calls GPT."""
     def __init__(self, registry, client=None):
         self.registry, self.client = registry, client or ModelClient(registry)
+        self.control=lambda:[]
+        self.ack=lambda *_:None
+        self.paths=lambda:None
 
     def run_task(self, task, workspace, evidence, timeout, record, history=None, session_id=None):
-        evidence.mkdir(parents=True, exist_ok=False, mode=0o700)
+        evidence.mkdir(parents=True, exist_ok=True, mode=0o700)
         chosen = task.models["primary"]
+        if session_id is None and (evidence/'execution.json').is_file():
+            prior=read_json((evidence/'execution.json').read_text(encoding='utf-8'))
+            if prior.get('backend')=='api':session_id=canonical_id(prior.get('session_id'))
         session_id = session_id or str(uuid.uuid4())
         history = list(history or [])
-        history += [{"role": "system", "content": "Complete the user's task using repository file tools. Do not claim tests ran. "
+        from .api_checkpoint import restore_pending,save_result
+        if history:restore_pending(history,self.registry.resolve(chosen)['wire_api'],evidence)
+        history += [{"role": "system", "content": "Complete the user's task using repository tools. Run relevant commands and tests through run_command; report only observed results. "
             "The controller handles Git commits, PRs and Issue receipts after successful execution. "
             "Group independent tool calls in one response. Write requested artifacts before your final answer. "
             "If review coverage is incomplete, disclose exactly what was not reviewed in the report. "
             "This is the current workspace and current write authorization; previous turns do not grant extra paths. Allowed paths: "
             + json.dumps(task.write_paths)}, {"role": "user", "content": task.prompt}]
-        files = FileTools(workspace, task.write_paths)
-        deadline = time.monotonic() + timeout
+        received=[]
+        def pulse():
+            updated=self.paths()
+            if updated is not None:files.write_paths=updated
+            for msg in self.control():
+                if msg['action']=='stop':self.ack(msg['id']);raise MvpError('cancelled_by_owner')
+                if msg['action'] in {'say','allow','retry'}:
+                    received.append(msg);self.ack(msg['id'])
+        def append_received():
+            if not received:return False
+            for msg in received:
+                history.append({'role':'user','content':msg['text'] if msg['action']=='say' else 'Continue with these authorized write paths: '+json.dumps(files.write_paths)})
+                record('remote_instruction_applied',{'comment_id':msg['comment_id']})
+            received.clear();return True
+        files = FileTools(workspace, task.write_paths, evidence, pulse)
+        deadline = time.monotonic() + timeout if timeout is not None else float("inf")
         log = evidence / "stdout.jsonl"
         def event(kind, **values):
             with log.open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps({"type": kind, **values}, ensure_ascii=False) + "\n")
+        def checkpoint():
+            path=evidence/'context.json'
+            temporary=path.with_suffix('.tmp')
+            temporary.write_text(json.dumps(history,ensure_ascii=False),encoding='utf-8')
+            temporary.replace(path)
+        metadata={"backend":"api","model":chosen['model'],"effort":chosen['effort'],"session_id":session_id,"started_at":utc_now()}
+        (evidence/'execution.json').write_text(json.dumps(metadata),encoding='utf-8')
+        checkpoint()
         event("thread.started", thread_id=session_id)
+        record('remote_session_opened',{'session_id':session_id,'context_path':str(evidence/'context.json')})
         event("turn.started")
         turns_used = 0
         max_turns = self.registry.limits["max_turns"]
         recovery = ResponseRecovery(self.registry, record)
+        recovery.pulse=pulse
         try:
             while max_turns is None or turns_used < max_turns:
+                pulse();append_received();checkpoint()
                 remaining = max_turns - turns_used if max_turns is not None else None
                 if remaining is not None and remaining <= 3:
                     history.append({"role": "system", "content":
@@ -204,29 +180,45 @@ class ApiFileRunner:
                 result = recovery.call(self.client, chosen, history, FILE_TOOLS, deadline)
                 record('api_model_response', {'turn': turns_used, 'max_turns': max_turns})
                 if recovery.continue_response(result, history, deadline):
+                    checkpoint()
                     continue
                 history.extend(result["history"])
-                if len(json.dumps(history, ensure_ascii=False).encode()) > 1024 * 1024:
-                    raise MvpError("api_context_limit")
+                checkpoint()
+                pulse()
+                if received:
+                    # New guidance arrived while HTTP waited. Do not execute stale tool requests.
+                    for call in result['calls']:
+                        history.append(tool_result(result['wire_api'],call['id'],{'error':'superseded_by_owner_instruction'}))
+                    append_received();continue
                 if not result["calls"]:
                     if not result["text"].strip():
                         raise MvpError("empty_model_response")
                     event("item.completed", item={"id": "final", "type": "agent_message", "text": result["text"]})
+                    record('remote_agent_message',{'text':result['text'],'phase':'final_answer'})
                     event("turn.completed")
                     return Execution(0, None), session_id, history
-                for call in result["calls"]:
+                for index,call in enumerate(result["calls"]):
+                    pulse()
+                    if received:
+                        for waiting in result['calls'][index:]:
+                            history.append(tool_result(result['wire_api'],waiting['id'],{'error':'superseded_by_owner_instruction'}))
+                        checkpoint();break
                     if time.monotonic() >= deadline:
                         raise MvpError("execution_timeout")
                     try:
                         arguments = read_json(call["arguments"])
+                        save_result(evidence,call['id'],{'error':'tool_in_progress_at_last_checkpoint','tool':call['name'],'instruction':'Inspect existing files and outputs before repeating any side effect.'})
                         value = files.call(call["name"], arguments)
                     except (MvpError, OSError, UnicodeError) as exc:
+                        if isinstance(exc,MvpError) and str(exc)=='cancelled_by_owner':raise
                         value = {"error": str(exc) if isinstance(exc, MvpError) else "file_tool_failed"}
+                    save_result(evidence,call['id'],value)
                     record("api_file_tool", {"name": call["name"], "turn": turns_used,
                                              "max_turns": max_turns, "ok": "error" not in value,
                                              **({'path': arguments['path']} if 'error' not in value and 'path' in arguments else {}),
                                              **({"error": value["error"]} if "error" in value else {})})
                     history.append(tool_result(result["wire_api"], call["id"], value))
+                    checkpoint()
                     if call["name"] in {"write_file", "delete_file"} and "error" not in value:
                         event("item.completed", item={"id": call["id"], "type": "file_change", "changes": [{"path": value["path"]}]})
             raise MvpError("model_turn_limit")
@@ -234,10 +226,8 @@ class ApiFileRunner:
             event("turn.failed", message=str(exc))
             return Execution(1, str(exc)), session_id, None
         finally:
-            # Private diagnostic history; failed sessions remain ineligible for automatic resume.
-            context = json.dumps(history, ensure_ascii=False)
-            if len(context.encode()) <= 1024 * 1024:
-                (evidence / "context.json").write_text(context, encoding="utf-8")
+            # Persist the full conversation even when the last request or command was interrupted.
+            checkpoint()
             (evidence / "execution.json").write_text(json.dumps({"backend": "api", "model": chosen["model"],
                 "effort": chosen["effort"], "session_id": session_id, "finished_at": utc_now(),
                 "turns_used": turns_used, "max_turns": max_turns}), encoding="utf-8")
