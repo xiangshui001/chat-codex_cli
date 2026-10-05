@@ -349,7 +349,7 @@ class WorkspaceTests(Fixture):
 
 @unittest.skipUnless(os.name == "posix", "MVP execution target is Linux/WSL")
 class RunnerProcessTests(Fixture):
-    def run_fixture(self, mode, *, timeout=10, limit=1024 * 1024):
+    def run_fixture(self, mode, *, timeout=10, limit=None):
         runner = CodexRunner((sys.executable, str(ROOT / "tests/fixtures/mvp0_codex.py"), mode), max_log_bytes=limit)
         metadata = runner.prepare(self.workspace)
         record = Mock()
@@ -384,6 +384,13 @@ class RunnerProcessTests(Fixture):
     def test_log_limit(self):
         result, _, _ = self.run_fixture("flood", limit=1024)
         self.assertEqual(result.error, "log_limit_exceeded")
+
+    def test_default_log_budget_is_unlimited(self):
+        self.assertIsNone(CodexRunner().max_log_bytes)
+        result, evidence, _ = self.run_fixture("large_log", timeout=30)
+        self.assertGreater((evidence / 'stdout.jsonl').stat().st_size, 16 * 1024 * 1024)
+        self.assertIsNone(result.error)
+        self.assertEqual(result.exit_code, 0)
 
     def test_timeout_cleans_descendant(self):
         result, evidence, _ = self.run_fixture("timeout", timeout=1)

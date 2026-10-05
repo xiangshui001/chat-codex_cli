@@ -27,7 +27,7 @@ class Execution:
 
 
 class CodexRunner:
-    def __init__(self, command: tuple[str, ...] = ("codex",), *, max_log_bytes: int = 16 * 1024 * 1024):
+    def __init__(self, command: tuple[str, ...] = ("codex",), *, max_log_bytes: int | None = None):
         self.command = command
         self.max_log_bytes = max_log_bytes
 
@@ -100,7 +100,7 @@ class CodexRunner:
                         if time.monotonic() >= deadline:
                             error = "execution_timeout"
                             break
-                        if stdout_path.stat().st_size + stderr_path.stat().st_size > self.max_log_bytes:
+                        if self.max_log_bytes is not None and stdout_path.stat().st_size + stderr_path.stat().st_size > self.max_log_bytes:
                             error = "log_limit_exceeded"
                             break
         except KeyboardInterrupt:
@@ -121,7 +121,7 @@ class CodexRunner:
             audit_path.write_text(json.dumps(audit, ensure_ascii=False, indent=2), encoding="utf-8")
         if proc is None:
             raise MvpError("codex_not_started")
-        if stdout_path.stat().st_size + stderr_path.stat().st_size > self.max_log_bytes:
+        if self.max_log_bytes is not None and stdout_path.stat().st_size + stderr_path.stat().st_size > self.max_log_bytes:
             error = error or "log_limit_exceeded"
         if error:
             return Execution(proc.returncode, error)
