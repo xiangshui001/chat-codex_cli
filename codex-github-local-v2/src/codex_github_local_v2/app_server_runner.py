@@ -9,6 +9,7 @@ import time
 
 from .mvp0_runner import CodexRunner, Execution, MvpError, utc_now
 from .process_identity import identity
+from . import __version__
 
 
 class AppServerRunner:
@@ -19,9 +20,9 @@ class AppServerRunner:
         evidence.mkdir(parents=True,exist_ok=True,mode=0o700)
         deadline=time.monotonic()+timeout if timeout is not None else float('inf')
         thread=metadata.get('session_id');turn=None;counter=0;pending={};messages=[]
-        failure=None;proc=None;retry_at=None;retry_count=0;completed=False
+        failure=None;proc=None;reader=None;retry_at=None;retry_count=0;completed=False
         audit={**metadata,'started_at':utc_now(),'pid':None,'exit_code':None}
-        incoming=queue.Queue();dispatched=set()
+        incoming=queue.Queue();dispatched=set();foreign_threads=set()
         env=dict(os.environ)
         for name in ('GH_TOKEN','GITHUB_TOKEN','GH_ENTERPRISE_TOKEN','GITHUB_ENTERPRISE_TOKEN'):env.pop(name,None)
         with (evidence/'stdout.jsonl').open('a',encoding='utf-8') as log,(evidence/'stderr.log').open('ab') as stderr:
@@ -47,7 +48,7 @@ class AppServerRunner:
                     except (ValueError,OSError) as exc:incoming.put({'local_error':type(exc).__name__})
                     finally:incoming.put({'eof':True})
                 reader=threading.Thread(target=read,daemon=True);reader.start()
-                send('initialize',{'clientInfo':{'name':'chat_codex_remote','title':'Issue remote execution','version':'0.2.0'},'capabilities':{'experimentalApi':True}})
+                send('initialize',{'clientInfo':{'name':'chat_codex_remote','title':'Issue remote execution','version':__version__},'capabilities':{'experimentalApi':True}})
                 while True:
                     if time.monotonic()>=deadline:raise MvpError('execution_timeout')
                     for msg in self.control():
@@ -112,6 +113,20 @@ class AppServerRunner:
                         else:
                             proc.stdin.write((json.dumps({'id':message['id'],'error':{'code':-32601,'message':'Unsupported server request'}})+'\n').encode());proc.stdin.flush();continue
                         proc.stdin.write((json.dumps({'id':message['id'],'result':response})+'\n').encode());proc.stdin.flush();continue
+                    if method in {'turn/started','turn/completed','item/completed','error','item/commandExecution/outputDelta'}:
+                        # Descendant agents share this stream; only our current root turn controls completion.
+                        notification_thread=params.get('threadId')
+                        if notification_thread!=thread:
+                            if notification_thread and notification_thread not in foreign_threads:
+                                foreign_threads.add(notification_thread)
+                                record('remote_foreign_thread_ignored',{'thread_id':notification_thread})
+                            continue
+                        notification_turn=params.get('turn',{}).get('id') if method.startswith('turn/') else params.get('turnId')
+                        if not notification_turn:continue
+                        if method=='turn/started':
+                            if turn is not None and notification_turn!=turn:continue
+                        elif turn is None or notification_turn!=turn:
+                            continue
                     if method=='turn/started':
                         turn=params.get('turn',{}).get('id',turn);event('turn.started');record('remote_turn_started',{'turn_id':turn})
                     elif method=='item/completed':
@@ -121,7 +136,7 @@ class AppServerRunner:
                         if kind=='commandExecution':
                             item['aggregated_output']=item.get('aggregatedOutput','')
                             item['exit_code']=item.get('exitCode')
-                        event('item.completed',item=item)
+                        event('item.completed',item=item,thread_id=thread,turn_id=turn)
                         if kind=='fileChange':record('remote_file_change',{'changes':[c.get('path') for c in item.get('changes',[])]})
                         if kind=='agentMessage' and item.get('text'):
                             record('remote_agent_message',{'text':item['text'],'item_id':item.get('id'),'phase':item.get('phase')})
@@ -149,6 +164,11 @@ class AppServerRunner:
             finally:
                 if proc is not None:
                     CodexRunner._stop_group(proc);audit['cleanup']='process_group_terminated';audit['exit_code']=proc.returncode
+                    if proc.stdin is not None:
+                        try:proc.stdin.close()
+                        except OSError:pass
+                    if reader is not None:reader.join(timeout=1)
+                    if proc.stdout is not None and (reader is None or not reader.is_alive()):proc.stdout.close()
                 audit.update(finished_at=utc_now(),error=failure,session_id=thread)
                 text=json.dumps(audit,ensure_ascii=False,indent=2)
                 (evidence/('execution-'+str(time.time_ns())+'.json')).write_text(text,encoding='utf-8')

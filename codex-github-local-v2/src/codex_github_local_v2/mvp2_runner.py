@@ -82,7 +82,8 @@ class SessionCodexRunner(CodexRunner):
                      "-c", "mcp_servers={}"]
         if task.models["mode"] == "gpt-led":
             args = ["-m", "codex_github_local_v2.collaboration_api", "--stdio", "--models-file",
-                    str(config.models_file), "--task-options", str(options_path)]
+                    str(config.models_file), "--task-options", str(options_path),
+                    "--jobs-dir", str(config.state_dir/'runs'/task.request_id/'collaborations')]
             key_names = sorted({registry.resolve(c, "other")["api_key_env"] for c in task.models["collaborators"]})
             overrides += ["-c", "mcp_servers.collaborators.command=" + json.dumps(sys.executable),
                           "-c", "mcp_servers.collaborators.args=" + json.dumps(args),

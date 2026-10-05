@@ -10,8 +10,10 @@ from pathlib import Path
 import sys
 
 from .model_api import Collaboration, CONSULT_TOOL, ModelRegistry
+from .consultation_jobs import ConsultationJobs
 from .mvp0 import fields, read_json
 from .mvp0_runner import MvpError
+from . import __version__
 
 
 
@@ -97,7 +99,7 @@ def mcp_dispatch(message, collaboration):
         if version not in {"2024-11-05", "2025-03-26", "2025-06-18"}:
             version = "2025-06-18"
         return {"protocolVersion": version, "capabilities": {"tools": {}},
-                "serverInfo": {"name": "codex-model-collaboration", "version": "0.1.0"}}
+                "serverInfo": {"name": "codex-model-collaboration", "version": __version__}}
     if method == "ping":
         return {}
     if method == "tools/list":
@@ -125,7 +127,9 @@ def mcp_dispatch(message, collaboration):
                 import uuid
                 job_id=str(uuid.uuid4())
                 result={'job_id':job_id,'status':'running'}
-                collaboration.jobs[job_id]=result
+                if isinstance(collaboration.jobs,ConsultationJobs):
+                    collaboration.jobs.start(job_id,result,args)
+                else:collaboration.jobs[job_id]=result
                 def invoke():
                     try:collaboration.jobs[job_id]={'job_id':job_id,'status':'completed',**collaboration.consult(args['index'],args['prompt'])}
                     except Exception as exc:collaboration.jobs[job_id]={'job_id':job_id,'status':'failed','error':str(exc) if isinstance(exc,MvpError) else 'collaboration_failed'}
@@ -165,6 +169,7 @@ def main(argv=None):
     parser.add_argument("--models-file", type=Path, required=True)
     parser.add_argument("--stdio", action="store_true")
     parser.add_argument("--task-options", type=Path)
+    parser.add_argument("--jobs-dir", type=Path)
     parser.add_argument("--port", type=int, default=8792)
     parser.add_argument("--token-env", default="CODEX_COLLABORATION_TOKEN")
     args = parser.parse_args(argv)
@@ -176,7 +181,7 @@ def main(argv=None):
             options = read_json(args.task_options.read_text(encoding="utf-8"))
             bridge = Collaboration(registry, options)
             bridge.async_consultations=True
-            bridge.jobs={}
+            bridge.jobs=ConsultationJobs(args.jobs_dir or args.task_options.parent/'collaboration-jobs')
             if options["mode"] != "gpt-led" or options["primary"]["provider"] != "codex":
                 raise MvpError("gpt_led_cli_required")
             serve_stdio(bridge)
