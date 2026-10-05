@@ -466,6 +466,72 @@ class PublisherTests(Fixture):
         self.assertEqual(self.git('rev-parse','HEAD'),commit)
         self.assertEqual(self.s.delivery(self.ident)['commit_sha'],commit)
 
+    def publish_initial_and_resume(self):
+        (self.workspace/'docs').mkdir();(self.workspace/'docs/check.txt').write_text('first')
+        self.pub.publish(self.ident)
+        first=self.s.delivery(self.ident)['commit_sha']
+        self.s.finish(self.ident,'succeeded',0,None,True,'done')
+        self.s.reopen(self.ident,'owner_followup')
+        self.client.pages.side_effect=lambda *_:[{'state':'open','html_url':'https://github.com/owner/project/pull/5',
+            'head':{'sha':self.git('rev-parse','HEAD')},'base':{'ref':'main'}}]
+        return first
+
+    def local_checkpoint(self,text):
+        (self.workspace/'docs/check.txt').write_text(text)
+        self.git('add','docs/check.txt');self.git('commit','-m',text)
+        return self.git('rev-parse','HEAD')
+
+    def test_followup_local_checkpoints_fast_forward_existing_pr_without_extra_commit(self):
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            first=self.publish_initial_and_resume()
+            middle=self.local_checkpoint('second stage')
+            last=self.local_checkpoint('query records')
+            self.s.completed_execution(self.ident)
+            self.pub.publish(self.ident)
+        self.assertEqual(self.s.delivery(self.ident)['commit_sha'],last)
+        self.assertEqual(self.git('rev-parse','HEAD^'),middle)
+        self.assertEqual(self.git('rev-parse','HEAD^^'),first)
+        self.assertEqual(self.s.get(self.ident)['base_sha'],self.base)
+        self.assertEqual(self.pushes,2)
+        self.client.api.assert_called_once()
+
+    def test_followup_committed_out_of_scope_change_is_not_adopted_or_pushed(self):
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            first=self.publish_initial_and_resume()
+            (self.workspace/'private.txt').write_text('unauthorized')
+            self.git('add','private.txt');self.git('commit','-m','out of scope')
+            self.s.completed_execution(self.ident)
+            with self.assertRaisesRegex(MvpError,'write_scope_violation'):self.pub.publish(self.ident)
+        self.assertEqual(self.s.delivery(self.ident)['commit_sha'],first)
+        self.assertEqual(self.pushes,1)
+
+    def test_push_retry_recognizes_recorded_previous_checkpoint_without_model_reexecution(self):
+        fail=[False]
+        def transport(cwd,*args,**kwargs):
+            if args[0]=='push' and fail[0]:
+                fail[0]=False;raise MvpError('workspace_git_push_failed')
+            return self.transport(cwd,*args,**kwargs)
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=transport):
+            first=self.publish_initial_and_resume()
+            last=self.local_checkpoint('second stage')
+            self.s.completed_execution(self.ident);fail[0]=True
+            with self.assertRaisesRegex(MvpError,'workspace_git_push_failed'):self.pub.publish(self.ident)
+            self.assertEqual(self.s.delivery(self.ident)['commit_sha'],last)
+            self.assertTrue(self.remote.startswith(first))
+            self.pub.publish(self.ident)
+        self.assertEqual(self.git('rev-parse','HEAD'),last)
+        self.assertEqual(self.pushes,2)
+        self.client.api.assert_called_once()
+
+    def test_unrecorded_remote_checkpoint_is_rejected_even_if_it_is_an_ancestor(self):
+        with patch('codex_github_local_v2.remote_git.run_remote_git',side_effect=self.transport):
+            self.publish_initial_and_resume()
+            self.local_checkpoint('second stage')
+            self.s.completed_execution(self.ident)
+            self.remote=self.base+'\trefs/heads/'+branch_name('desktop',RID)
+            with self.assertRaisesRegex(MvpError,'publication_remote_branch_conflict'):self.pub.publish(self.ident)
+        self.assertEqual(self.pushes,1)
+
 
 if __name__ == '__main__':
     unittest.main()

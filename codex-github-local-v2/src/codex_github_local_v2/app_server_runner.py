@@ -9,6 +9,7 @@ import time
 
 from .mvp0_runner import CodexRunner, Execution, MvpError, utc_now
 from .process_identity import identity
+from . import __version__
 
 
 class AppServerRunner:
@@ -19,9 +20,9 @@ class AppServerRunner:
         evidence.mkdir(parents=True,exist_ok=True,mode=0o700)
         deadline=time.monotonic()+timeout if timeout is not None else float('inf')
         thread=metadata.get('session_id');turn=None;counter=0;pending={};messages=[]
-        failure=None;proc=None;retry_at=None;retry_count=0;completed=False
+        failure=None;proc=None;reader=None;retry_at=None;retry_count=0;completed=False
         audit={**metadata,'started_at':utc_now(),'pid':None,'exit_code':None}
-        incoming=queue.Queue();dispatched=set()
+        incoming=queue.Queue();dispatched=set();foreign_threads=set()
         env=dict(os.environ)
         for name in ('GH_TOKEN','GITHUB_TOKEN','GH_ENTERPRISE_TOKEN','GITHUB_ENTERPRISE_TOKEN'):env.pop(name,None)
         with (evidence/'stdout.jsonl').open('a',encoding='utf-8') as log,(evidence/'stderr.log').open('ab') as stderr:
@@ -33,8 +34,25 @@ class AppServerRunner:
                 proc.stdin.write((json.dumps({'id':counter,'method':method,'params':params},ensure_ascii=False)+'\n').encode());proc.stdin.flush()
                 return counter
             def start_turn(text,context=None):
+                contexts=([context] if isinstance(context,dict) else list(context or []))
+                while messages:
+                    instruction,message=messages.pop(0)
+                    text+='\n\nLatest owner instruction from Issue comment '+str(message['comment_id'])+':\n'+instruction
+                    contexts.append({**message,'text':instruction})
                 send('turn/start',{'threadId':thread,'input':[{'type':'text','text':text}],
-                    'model':metadata['model'],'effort':metadata['effort'],'cwd':metadata['cwd'],'approvalPolicy':'never'},context)
+                    'model':metadata['model'],'effort':metadata['effort'],'cwd':metadata['cwd'],'approvalPolicy':'never'},contexts)
+            def queued_steer():
+                if not turn or not messages:return
+                queued=list(messages);messages.clear()
+                send('turn/steer',{'threadId':thread,'expectedTurnId':turn,
+                    'input':[{'type':'text','text':text} for text,_ in queued]},
+                    [{**message,'text':text} for text,message in queued])
+            def restore_messages(context):
+                for message in ([context] if isinstance(context,dict) else context or []):
+                    messages.append((message['text'],message))
+            def acknowledge(context):
+                for message in ([context] if isinstance(context,dict) else context or []):
+                    self.ack(message['id']);record('remote_instruction_applied',{'comment_id':message['comment_id']})
             try:
                 proc=subprocess.Popen(metadata['argv'],cwd=metadata['cwd'],env=env,stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=stderr,start_new_session=True)
                 audit['pid']=proc.pid;audit['lease']=identity(proc.pid)
@@ -47,7 +65,7 @@ class AppServerRunner:
                     except (ValueError,OSError) as exc:incoming.put({'local_error':type(exc).__name__})
                     finally:incoming.put({'eof':True})
                 reader=threading.Thread(target=read,daemon=True);reader.start()
-                send('initialize',{'clientInfo':{'name':'chat_codex_remote','title':'Issue remote execution','version':'0.2.0'},'capabilities':{'experimentalApi':True}})
+                send('initialize',{'clientInfo':{'name':'chat_codex_remote','title':'Issue remote execution','version':__version__},'capabilities':{'experimentalApi':True}})
                 while True:
                     if time.monotonic()>=deadline:raise MvpError('execution_timeout')
                     for msg in self.control():
@@ -59,8 +77,8 @@ class AppServerRunner:
                         if msg['action'] in {'say','allow','retry'}:
                             text=msg['text'] if msg['action']=='say' else ('Updated authorized write paths: '+msg['text'] if msg['action']=='allow' else 'Continue from retained progress; do not restart completed operations.')
                             if turn:
-                                send('turn/steer',{'threadId':thread,'expectedTurnId':turn,'input':[{'type':'text','text':text}]},msg)
-                            else:messages.append((text,msg))
+                                send('turn/steer',{'threadId':thread,'expectedTurnId':turn,'input':[{'type':'text','text':text}]},{**msg,'text':text})
+                            else:messages.append((text,{**msg,'text':text}))
                     if retry_at is not None and time.monotonic()>=retry_at:
                         retry_at=None
                         start_turn('The prior turn failed because of a transport/service error. Continue the same task from existing files and completed tool results. Do not repeat completed work. Resolve routine issues yourself. '+prompt)
@@ -80,7 +98,8 @@ class AppServerRunner:
                         method,context=pending.pop(message['id'],('',None))
                         if 'error' in message:
                             if method=='turn/steer' and context:
-                                messages.append((context['text'],context));continue
+                                restore_messages(context);continue
+                            if method=='turn/start' and context:restore_messages(context)
                             # A refused start/resume is visible remotely; keep server/context available for repair.
                             record('remote_recovery',{'reason':'codex_rpc_error','method':method,'rpc_error':message['error']})
                             if method in {'thread/start','thread/resume'}:raise MvpError('codex_thread_unavailable')
@@ -100,7 +119,8 @@ class AppServerRunner:
                             start_turn(prompt)
                         elif method in {'turn/start','turn/steer'}:
                             if method=='turn/start':turn=result.get('turn',{}).get('id',turn);completed=False
-                            if context:self.ack(context['id']);record('remote_instruction_applied',{'comment_id':context['comment_id']})
+                            acknowledge(context)
+                            if method=='turn/start':queued_steer()
                         continue
                     method=message.get('method','');params=message.get('params',{})
                     if 'id' in message:
@@ -112,8 +132,23 @@ class AppServerRunner:
                         else:
                             proc.stdin.write((json.dumps({'id':message['id'],'error':{'code':-32601,'message':'Unsupported server request'}})+'\n').encode());proc.stdin.flush();continue
                         proc.stdin.write((json.dumps({'id':message['id'],'result':response})+'\n').encode());proc.stdin.flush();continue
+                    if method in {'turn/started','turn/completed','item/completed','error','item/commandExecution/outputDelta'}:
+                        # Descendant agents share this stream; only our current root turn controls completion.
+                        notification_thread=params.get('threadId')
+                        if notification_thread!=thread:
+                            if notification_thread and notification_thread not in foreign_threads:
+                                foreign_threads.add(notification_thread)
+                                record('remote_foreign_thread_ignored',{'thread_id':notification_thread})
+                            continue
+                        notification_turn=params.get('turn',{}).get('id') if method.startswith('turn/') else params.get('turnId')
+                        if not notification_turn:continue
+                        if method=='turn/started':
+                            if turn is not None and notification_turn!=turn:continue
+                        elif turn is None or notification_turn!=turn:
+                            continue
                     if method=='turn/started':
                         turn=params.get('turn',{}).get('id',turn);event('turn.started');record('remote_turn_started',{'turn_id':turn})
+                        queued_steer()
                     elif method=='item/completed':
                         item=dict(params.get('item',{}));kind=item.get('type')
                         mapping={'agentMessage':'agent_message','commandExecution':'command_execution','fileChange':'file_change','plan':'plan','mcpToolCall':'mcp_tool_call'}
@@ -121,7 +156,7 @@ class AppServerRunner:
                         if kind=='commandExecution':
                             item['aggregated_output']=item.get('aggregatedOutput','')
                             item['exit_code']=item.get('exitCode')
-                        event('item.completed',item=item)
+                        event('item.completed',item=item,thread_id=thread,turn_id=turn)
                         if kind=='fileChange':record('remote_file_change',{'changes':[c.get('path') for c in item.get('changes',[])]})
                         if kind=='agentMessage' and item.get('text'):
                             record('remote_agent_message',{'text':item['text'],'item_id':item.get('id'),'phase':item.get('phase')})
@@ -149,6 +184,11 @@ class AppServerRunner:
             finally:
                 if proc is not None:
                     CodexRunner._stop_group(proc);audit['cleanup']='process_group_terminated';audit['exit_code']=proc.returncode
+                    if proc.stdin is not None:
+                        try:proc.stdin.close()
+                        except OSError:pass
+                    if reader is not None:reader.join(timeout=1)
+                    if proc.stdout is not None and (reader is None or not reader.is_alive()):proc.stdout.close()
                 audit.update(finished_at=utc_now(),error=failure,session_id=thread)
                 text=json.dumps(audit,ensure_ascii=False,indent=2)
                 (evidence/('execution-'+str(time.time_ns())+'.json')).write_text(text,encoding='utf-8')

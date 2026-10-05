@@ -276,6 +276,11 @@ class Publisher:
             ws.check_changes(task,ws.changes())
             commit=actual
             self.store.publication(task_id,commit_sha=commit,publication_state='committed')
+        elif commit and actual!=commit:
+            # A continued conversation may create multiple authorized local checkpoints.
+            ws.check_changes(replace(task,base_sha=commit),ws.changes())
+            commit=actual
+            self.store.publication(task_id,commit_sha=commit,publication_state='committed')
         if commit and ws.git('rev-parse','HEAD')==commit and ws.changes():
             task=replace(task,base_sha=commit)
             commit=None
@@ -298,8 +303,14 @@ class Publisher:
         # Never force push; refuse an unrelated branch already present at the destination.
         remote = ws.git("ls-remote", "origin", "refs/heads/" + branch)
         if remote and remote.split()[0] != commit:
-            if not prior_commit or remote.split()[0]!=prior_commit:raise MvpError("publication_remote_branch_conflict")
-            ws.git('merge-base','--is-ancestor',prior_commit,commit)
+            # Retain earlier publication checkpoints when a push failed after recording the new one.
+            known_commits={prior_commit}
+            for event in self.store.db.execute("SELECT detail FROM events WHERE task_id=? AND kind='publication_updated'",(task_id,)):
+                recorded=json.loads(event['detail']).get('commit_sha')
+                if recorded:known_commits.add(recorded)
+            remote_commit=remote.split()[0]
+            if remote_commit not in known_commits:raise MvpError("publication_remote_branch_conflict")
+            ws.git('merge-base','--is-ancestor',remote_commit,commit)
         if not remote or remote.split()[0]!=commit:
             ws.git("push", "origin", "HEAD:refs/heads/" + branch)
         self.store.publication(task_id, publication_state="pushed")

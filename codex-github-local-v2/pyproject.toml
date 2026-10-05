@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-github-local-v2"
-version = "0.2.0"
+version = "0.2.1"
 description = "Account-wide GitHub Issue execution with local chats, model collaboration and draft PR delivery"
 requires-python = ">=3.11"
 dependencies = []

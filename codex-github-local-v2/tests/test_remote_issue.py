@@ -280,21 +280,45 @@ class UnlimitedApiTests(api_fixtures.ApiFixture):
 
 
 FAKE_SERVER='''
-import json,sys,pathlib
+import json,sys,pathlib,time
 root=pathlib.Path(sys.argv[1]);mode=sys.argv[2];thread="56384b35-4a58-42eb-a9d3-3b203d29a3b9";number=0
 def out(value):print(json.dumps(value),flush=True)
+def notify(method,params,owner=None,turn_id=None):
+ params['threadId']=owner or thread
+ if turn_id:params['turnId']=turn_id
+ out({'method':method,'params':params})
 for line in sys.stdin:
  m=json.loads(line);method=m.get("method");p=m.get("params",{});ident=m.get("id")
  if method=="initialize":out({"id":ident,"result":{}})
  elif method in ("thread/start","thread/resume"):
   (root/"thread-params.json").write_text(json.dumps(p));out({"id":ident,"result":{"thread":{"id":thread}}})
  elif method=="turn/start":
-  number+=1;turn="turn-"+str(number);out({"id":ident,"result":{"turn":{"id":turn}}});out({"method":"turn/started","params":{"turn":{"id":turn}}})
-  if mode=="recover" and number==1:out({"method":"turn/completed","params":{"turn":{"id":turn,"status":"failed","error":{"message":"temporary network failure"}}}})
-  elif mode=="steer":(root/"ready").write_text(turn)
-  else:out({"method":"turn/completed","params":{"turn":{"id":turn,"status":"completed"}}})
+  number+=1;turn="turn-"+str(number)
+  (root/("start-"+str(number)+".json")).write_text(json.dumps(p))
+  if mode=='rpc-retry' and number==1:
+   out({'id':ident,'error':{'code':-32000,'message':'temporary start failure'}});continue
+  if mode=='late-steer':
+   (root/'start-waiting').write_text(turn);time.sleep(.5)
+  out({"id":ident,"result":{"turn":{"id":turn}}});notify('turn/started',{'turn':{'id':turn}})
+  if mode in ('recover','stale') and number==1:notify('turn/completed',{'turn':{'id':turn,'status':'failed','error':{'message':'temporary network failure'}}})
+  elif mode in ("steer","late-steer"):(root/"ready").write_text(turn)
+  else:
+   if mode in ('foreign','foreign-failure'):
+    notify('turn/started',{'turn':{'id':'child-turn'}},'child-thread')
+    notify('item/completed',{'item':{'type':'agentMessage','id':'child-answer','phase':'final_answer','text':'child audit only'}},'child-thread','child-turn')
+    notify('error',{'willRetry':False,'error':{'message':'child failure'}},'child-thread','child-turn')
+    notify('turn/completed',{'turn':{'id':'child-turn','status':'completed' if mode=='foreign' else 'interrupted'}},'child-thread')
+    time.sleep(.6)
+   elif mode=='stale' and number==2:
+    notify('turn/started',{'turn':{'id':'turn-1'}})
+    notify('item/completed',{'item':{'type':'agentMessage','id':'stale-answer','text':'stale answer'}},turn_id='turn-1')
+    notify('turn/completed',{'turn':{'id':'turn-1','status':'completed'}})
+    time.sleep(.6)
+   (root/'parent-finished').write_text(turn)
+   notify('item/completed',{'item':{'type':'agentMessage','id':'parent-answer','phase':'final_answer','text':'parent work complete'}},turn_id=turn)
+   notify('turn/completed',{'turn':{'id':turn,'status':'completed'}})
  elif method=="turn/steer":
-  (root/"steer.json").write_text(json.dumps(p));out({"id":ident,"result":{}});out({"method":"item/completed","params":{"item":{"type":"agentMessage","id":"answer","phase":"final_answer","text":"new instruction applied"}}});out({"method":"turn/completed","params":{"turn":{"id":p['expectedTurnId'],"status":"completed"}}})
+  (root/"steer.json").write_text(json.dumps(p));out({"id":ident,"result":{}});notify('item/completed',{'item':{'type':'agentMessage','id':'answer','phase':'final_answer','text':'new instruction applied'}},turn_id=p['expectedTurnId']);notify('turn/completed',{'turn':{'id':p['expectedTurnId'],'status':'completed'}})
  elif method=="turn/interrupt":out({"id":ident,"result":{}})
 '''
 
@@ -325,6 +349,67 @@ class AppServerTests(fixtures.Fixture):
         self.assertEqual(len([e for e in events if e[0]=='remote_session_opened']),1)
         self.assertEqual(len([e for e in events if e[0]=='remote_turn_started']),2)
         self.assertTrue(any(e[0]=='remote_recovery' for e in events))
+
+    def test_initial_owner_constraints_are_in_first_request_without_extra_turn(self):
+        acknowledged=[];events=[]
+        messages=[{'id':i,'comment_id':200+i,'action':'say','text':text}
+                  for i,text in ((1,'Do not submit any new model jobs'),(2,'Use saved answers only'))]
+        def control():return [m for m in messages if m['id'] not in acknowledged]
+        result=AppServerRunner(control,acknowledged.append).run(self.metadata('foreign'),'original',self.root/'run',10,lambda k,d:events.append((k,d)))
+        self.assertIsNone(result.error)
+        first=json.loads((self.root/'start-1.json').read_text())['input'][0]['text']
+        for message in messages:self.assertIn(message['text'],first)
+        self.assertEqual(acknowledged,[1,2])
+        self.assertFalse((self.root/'start-2.json').exists())
+        self.assertEqual([d['turn_id'] for k,d in events if k=='remote_turn_started'],['turn-1'])
+
+    def test_instruction_arriving_during_start_is_steered_into_current_turn(self):
+        acknowledged=[]
+        message={'id':1,'comment_id':222,'action':'say','text':'No new calls; inspect retained results'}
+        def control():return [message] if (self.root/'start-waiting').exists() and not acknowledged else []
+        result=AppServerRunner(control,acknowledged.append).run(self.metadata('late-steer'),'original',self.root/'run',5,lambda *_:None)
+        self.assertIsNone(result.error)
+        steer=json.loads((self.root/'steer.json').read_text())
+        self.assertEqual(steer['expectedTurnId'],'turn-1')
+        self.assertEqual(steer['input'][0]['text'],message['text'])
+        self.assertEqual(acknowledged,[1])
+        self.assertFalse((self.root/'start-2.json').exists())
+
+    def test_rpc_start_retry_keeps_unacknowledged_owner_constraints(self):
+        acknowledged=[]
+        message={'id':1,'comment_id':222,'action':'say','text':'Do not repeat the paid jobs'}
+        def control():return [message] if not acknowledged else []
+        result=AppServerRunner(control,acknowledged.append).run(self.metadata('rpc-retry'),'original',self.root/'run',10,lambda *_:None)
+        self.assertIsNone(result.error)
+        for number in (1,2):
+            start=json.loads((self.root/('start-'+str(number)+'.json')).read_text())
+            self.assertIn(message['text'],start['input'][0]['text'])
+        self.assertEqual(acknowledged,[1])
+        self.assertFalse((self.root/'start-3.json').exists())
+
+    def test_child_completion_cannot_finish_the_parent_or_replace_its_answer(self):
+        events=[]
+        result=AppServerRunner().run(self.metadata('foreign'),'task',self.root/'run',10,lambda k,d:events.append((k,d)))
+        self.assertIsNone(result.error)
+        self.assertEqual((self.root/'parent-finished').read_text(),'turn-1')
+        self.assertEqual([d['turn_id'] for k,d in events if k=='remote_turn_started'],['turn-1'])
+        self.assertEqual([d['text'] for k,d in events if k=='remote_agent_message'],['parent work complete'])
+        self.assertFalse(any(k=='remote_transport_error' for k,d in events))
+
+    def test_child_interruption_does_not_cancel_parent_execution(self):
+        events=[]
+        result=AppServerRunner().run(self.metadata('foreign-failure'),'task',self.root/'run',10,lambda k,d:events.append((k,d)))
+        self.assertIsNone(result.error)
+        self.assertTrue((self.root/'parent-finished').is_file())
+        self.assertEqual([d['text'] for k,d in events if k=='remote_agent_message'],['parent work complete'])
+
+    def test_late_previous_turn_events_cannot_finish_a_recovery_turn(self):
+        events=[]
+        result=AppServerRunner().run(self.metadata('stale'),'task',self.root/'run',10,lambda k,d:events.append((k,d)))
+        self.assertIsNone(result.error)
+        self.assertEqual((self.root/'parent-finished').read_text(),'turn-2')
+        self.assertEqual([d['turn_id'] for k,d in events if k=='remote_turn_started'],['turn-1','turn-2'])
+        self.assertEqual([d['text'] for k,d in events if k=='remote_agent_message'],['parent work complete'])
 
     def test_owner_stop_preserves_session_and_cleans_process(self):
         msg={'id':1,'comment_id':222,'action':'stop','text':''}
